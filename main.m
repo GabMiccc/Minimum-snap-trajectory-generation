@@ -15,19 +15,19 @@ times = [0, 2.0, 5.0, 7.0];
 assert(size(waypoints,1) == length(times))
 
 % --- CONFIGURAZIONE OTTIMIZZAZIONE ---
-config.n_pos = 7; % Ordine polinomi posizione (minimo snap richiede derivate fino alla 4a)
+config.n_pos = 7; % Grado/order polinomi posizione (minimo snap richiede derivate fino alla 4a)
 % poichè ogni segmento (intervallo tra due wp) ha 2 estremità e se serve
 % imporre la continuità di posizione velocità, accelerazione e jerk su
 % entrambi i lati servono 8 condizioni al contorno, 4 per lato. Un
 % polinomio di ordine 7 ha 8 coefficienti. Potenzialmente si potrebbe
 % imporre la continuità anche del jerk con n=9.
-config.n_yaw = 3; % Ordine polinomi yaw (minimo accel. richiede derivate fino alla 2a)
+config.n_yaw = 3; % Grado/order polinomi yaw (minimo accel. richiede derivate fino alla 2a)
 config.k_pos = 4; % (4, snap)
 config.k_yaw = 2; % (2, Accelerazione Yaw)
 
 %  -- Parametri per Safe Corridors
 % Inf = nessun vincolo, numero = ampiezza massima deviazione (metri)
-config.corridor_delta = [Inf, 0.1, Inf]; 
+config.corridor_delta = [Inf, 0.05, Inf]; 
 
 assert( size(waypoints,1) == length(times) && size(waypoints,1) == length(config.corridor_delta)+1 )
 
@@ -35,7 +35,7 @@ assert( size(waypoints,1) == length(times) && size(waypoints,1) == length(config
 config.corridor_samples = 3;
 
 % -- Temporal scaling
-config.use_temporal_scaling = true;
+config.use_scaling = true;
 
 %% generazione traiettoria minimum snap
 [c_init, ~] = trajectoryGen(times, waypoints, config);
@@ -70,3 +70,33 @@ ylim([min(cost_history)*0.95, max(cost_history)*1.05]);
 %% Visualizzazione Confronto Traiettorie
 % times_current e c_current contengono i valori dell'ultima iterazione
 plot_trajectory_evolution(waypoints, times, c_init, times_current, c_current, config);
+
+%% ====================    SIMULAZIONE  ====================
+
+% PARAMETRI FISICI DEL QUADRIROTORE (PLANT)
+config.mass = 1.0; % Massa in kg
+config.g = 9.81;   % Accelerazione di gravità (m/s^2)
+
+% Matrice di inerzia J (kg * m^2) lungo gli assi x_B, y_B, z_B
+config.J = diag([0.01, 0.01, 0.02]); 
+
+% GUADAGNI DEL CONTROLLORE GEOMETRICO 
+% ===========================================================
+% Tuning del loop di Posizione (Traslazionale)
+config.Kp = 15.0; % Reattività all'errore di posizione
+config.Kv = 6.0;  % Smorzamento all'errore di velocità
+
+% Tuning del loop di Assetto (Rotazionale)
+config.KR = 8.0;     % Reattività all'errore di orientamento (Roll, Pitch, Yaw)
+config.Komega = 1.5; % Smorzamento all'errore di velocità angolare (p, q, r)
+
+%% ==========================================================
+% AVVIO SIMULAZIONE AD ANELLO CHIUSO
+% ===========================================================
+
+% Parametri di simulazione
+config.dt = 0.001; 
+fprintf('\n--- Avvio Simulazione 3D in corso ---\n');
+
+% Passiamo i tempi ottimizzati (times_current) e i coefficienti (c_current)
+simulate_flight(times_current, c_current, waypoints, config);
