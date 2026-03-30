@@ -12,16 +12,30 @@ function [times_opt, c_opt, cost_history] = optimize_segment_times(times, waypoi
     m = length(T);
     cost_history = zeros(1, max_iter);
     
+    % Prepariamo il salvataggio della migliore iterazione
+    best_cost = inf;          % Inizializziamo il record a infinito
+    best_times = times;       % Array dei tempi
+    best_coeffs = struct();   % Struttura dei coefficienti
+
     fprintf('\n--- Inizio ottimizzazione tempi dei segmenti ---\n');
     
     for iter = 1:max_iter
         % 1. Ricostruisci i tempi assoluti dai segmenti T attuali
-        times_current = [0, cumsum(T)];
+        times_current = [0, cumsum(T)]; % T viene sovrascritta
         
-        % 2. Calcola il costo base f(T)
-        [c_current, cost_base] = trajectoryGen(times_current, waypoints, config);
+        % 2. Calcola il costo base f(T) della iterazione attuale
+        [c_current, cost_base] = trajectoryGen(times_current, waypoints, config); 
         cost_history(iter) = cost_base;
         
+        % ---> SALVATAGGIO BEST STATE <---
+        % Se questo costo base è il migliore mai visto, salvalo
+        if cost_base < best_cost
+            best_cost = cost_base;
+            best_times = times_current;
+            best_coeffs = c_current;
+        end
+
+
         fprintf('Iterazione %d - Costo totale: %.2f\n', iter, cost_base);
         
         % 3. Calcolo del gradiente direzionale numerico
@@ -73,11 +87,15 @@ function [times_opt, c_opt, cost_history] = optimize_segment_times(times, waypoi
             % Ripristina la somma esatta di T per compensare arrotondamenti
             T = T_new * (sum(T) / sum(T_new)); 
         end
+
+        
+
     end
     
-    % Salvataggio risultati ottimali finali
-    times_opt = [0, cumsum(T)];
-    c_opt = c_current;
+    % --- RESTITUZIONE RISULTATI MIGLIORI ---
+    times_opt = best_times;
+    c_opt = best_coeffs;
     
     fprintf('--- Ottimizzazione Completata ---\n\n');
+    fprintf('Miglior costo applicato alla traiettoria finale: %.2f\n\n', best_cost);
 end

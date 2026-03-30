@@ -22,6 +22,11 @@ function simulate_flight(times, c_opt, waypoints, config)
     N_steps = length(time_history);
     pos_history = zeros(3, N_steps);
     
+    % Pre-allocazione per i log di performance
+    err_pos_history = zeros(3, N_steps);
+    vel_real_history = zeros(1, N_steps); 
+    vel_des_history = zeros(1, N_steps);
+
    %% --- 2. SETUP GRAFICA 3D ---
     figure('Name', 'Simulazione Volo 3D', 'Color', [0.1 0.1 0.1]); 
     hold on; grid on; set(gca, 'Color', [0.15 0.15 0.15], 'XColor', 'w', 'YColor', 'w', 'ZColor', 'w');
@@ -36,10 +41,9 @@ function simulate_flight(times, c_opt, waypoints, config)
     plot3(waypoints(:,1), waypoints(:,2), waypoints(:,3), 'wo', 'MarkerSize', 8, 'MarkerFaceColor', 'w');
     
     %% ==========================================================
-    % B. PRE-PLOT TRAIETTORIA DESIDERATA (LINEA TRATTEGGIATA BIANCA)
+    % B. PRE-PLOT TRAIETTORIA DESIDERATA
     % ===========================================================
     % Generiamo una linea ad alta risoluzione da eval_traj prima del loop
-    fprintf('Generazione e pre-plot della traiettoria desiderata...\n');
     t_ref = linspace(0, t_end, 500);
     pos_ref = zeros(3, length(t_ref));
     
@@ -84,10 +88,12 @@ function simulate_flight(times, c_opt, waypoints, config)
         state_des.yaw_dot = vyaw;
         
         % B. CONTROLLORE GEOMETRICO
-        u = geometric_controller(state_real, state_des, config);
+        u_ideal = geometric_controller(state_real, state_des, config, t);
+        % FILTRO saturazione motori
+        u_real = motor_mixing(u_ideal, config);
         
         % C. DINAMICA E INTEGRAZIONE
-        state_dot = quadrotor_dynamics(state_real, u, config);
+        state_dot = quadrotor_dynamics(state_real, u_real, config);
         
         % Step di Eulero
         state_real.pos = state_real.pos + state_dot.pos * dt;
@@ -102,6 +108,11 @@ function simulate_flight(times, c_opt, waypoints, config)
         % Salvataggio scia
         pos_history(:, i) = state_real.pos;
         
+        % Salvataggio dati per il Sanity Check
+        err_pos_history(:, i) = state_real.pos - state_des.pos;
+        vel_real_history(i) = norm(state_real.vel); % Modulo della velocità reale
+        vel_des_history(i) = norm(state_des.vel);   % Modulo della velocità desiderata
+
         % D. AGGIORNAMENTO GRAFICO (a 20 FPS per non bloccare tutto)
         if mod(t, 0.05) < dt/2 
             set(h_drone, 'XData', state_real.pos(1), 'YData', state_real.pos(2), 'ZData', state_real.pos(3));
@@ -111,4 +122,25 @@ function simulate_flight(times, c_opt, waypoints, config)
     end
     
     disp('Simulazione Terminata!');
+        %% --- PLOT PERFORMANCE (Il nostro Sanity Check) ---
+    figure('Name', 'Analisi Performance', 'Color', 'w', 'Position', [100, 100, 800, 300]);
+    
+    % Riquadro 1: Errore di Posizione (X, Y, Z)
+    subplot(1, 2, 1);
+    plot(time_history, err_pos_history(1,:), 'g--', 'LineWidth', 1.5); hold on;
+    plot(time_history, err_pos_history(2,:), 'r--', 'LineWidth', 1.5);
+    plot(time_history, err_pos_history(3,:), 'b--', 'LineWidth', 1.5);
+    grid on;
+    xlabel('Time (s)'); ylabel('Error (m)');
+    legend('x', 'y', 'z', 'Location', 'best');
+    title('Position Error');
+    
+    % Riquadro 2: Tracking della Velocità
+    subplot(1, 2, 2);
+    plot(time_history, vel_des_history, 'b', 'LineWidth', 2); hold on;
+    plot(time_history, vel_real_history, 'r', 'LineWidth', 1.5);
+    grid on;
+    xlabel('Time (s)'); ylabel('Velocity (m/s)');
+    legend('desired', 'actual', 'Location', 'best');
+    title('Velocity Profile');
 end

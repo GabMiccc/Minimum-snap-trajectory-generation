@@ -1,4 +1,4 @@
-function u = geometric_controller(state, state_des, config)
+function u = geometric_controller(state, state_des, config, t)
     % GEOMETRIC_CONTROLLER Calcola i comandi per i motori (Spinta e Momenti)
     % state     : struct attuale (pos, vel, Rbw, omega_BW)
     % state_des : struct desiderata (pos, vel, acc, yaw, yaw_dot) serve
@@ -14,7 +14,13 @@ function u = geometric_controller(state, state_des, config)
     % drone reagisce con stessa forza su tutti gli assi
     Kp = config.Kp; Kv = config.Kv;
     KR = config.KR; Kw = config.Komega;
-
+    
+    % Inizializza la variabile di memoria per il cooldown dei warning
+    persistent last_warning_time;
+    % Se è la prima volta che gira, o se la simulazione è ripartita da zero (t < last), resetta
+    if isempty(last_warning_time) || t < last_warning_time
+        last_warning_time = -inf; 
+    end
     %% ==========================================================
     % 1. CONTROLLO DI POSIZIONE (Calcolo Forza e Spinta u1)
     % ===========================================================
@@ -65,11 +71,14 @@ function u = geometric_controller(state, state_des, config)
     % Psi = 1/2 * trace(I - R_des^T * R)
 
     Psi = 0.5 * trace(eye(3) - R_des' * state.Rbw);
-    if Psi >= 2.0
-        warning('ATTENZIONE: Stabilità esponenziale persa! Errore di assetto > 180 gradi (Psi = %.2f)', Psi);
-    elseif Psi >= 1.0
-        warning(['ATTENZIONE: Stabilità esponenziale persa! Errore di assetto > 90 gradi (Psi = %.2f)' ...
-            ' \n I guadagni lineari potrebbero non bastare a recuperare l assetto '], Psi);
+    if (t - last_warning_time) >= config.warning_cooldown
+        if Psi >= 2.0
+            warning('ATTENZIONE (t=%.2fs): Stabilità esponenziale persa! Errore di assetto > 180 gradi (Psi = %.2f)', t, Psi);        
+        elseif Psi >= 1.0
+            warning(['ATTENZIONE (t=%.2fs): Stabilità esponenziale persa! Errore di assetto > 90 gradi (Psi = %.2f)' ...
+                ' \n I guadagni lineari potrebbero non bastare a recuperare l assetto '], t, Psi);
+        end
+        last_warning_time = t; % Aggiorna il timer
     end
 
     %% ==========================================================

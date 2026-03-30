@@ -29,7 +29,7 @@ function [c, total_cost] = trajectoryGen(times, waypoints, config)
     for dim = 1:4 % [x y z yaw]
         if dim < 4  % [x y z]
             n = n_pos;
-            k = k_pos; % k_r = 4 (Snap)
+            k = k_pos; % k_r = 4 (Se è 4 stiamo derivando 4 volte fino allo Snap)
             w_points = waypoints(:, dim);
         else
             n = n_yaw;

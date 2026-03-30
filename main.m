@@ -10,7 +10,7 @@ waypoints = [ 0,    0,   1,   0;        % Partenza (Hovering)
 
 % times: Vettore dei tempi di arrivo ai keyframes (t0, t1, ..., tm)
 % Nota: t0 deve essere 0.
-times = [0, 2.0, 5.0, 7.0]; 
+times = [0, 2.0, 5.0, 7.0]/2; 
 
 assert(size(waypoints,1) == length(times))
 
@@ -46,7 +46,7 @@ plot_trajectory(waypoints, times, c_init, config)
 %% OPTIMAL SEGMENT TIMES
 
 % Parametri discesa del gradiente
-config.opt_max_iter = 10;
+config.opt_max_iter = 20;
 config.opt_h = 1e-4; % Perturbazione per il gradiente numerico
 config.opt_learning_rate = 0.5; % Passo di discesa
 config.opt_use_backtracking = true;                                        % SET
@@ -90,13 +90,34 @@ config.Kv = 6.0;  % Smorzamento all'errore di velocità
 config.KR = 8.0;     % Reattività all'errore di orientamento (Roll, Pitch, Yaw)
 config.Komega = 1.5; % Smorzamento all'errore di velocità angolare (p, q, r)
 
+% Parametri aerodinamici e geometrici
+config.L = 0.17;       % Lunghezza braccio (m)
+config.kF = 8.548e-6;  % Coefficiente di spinta (N / (rad/s)^2)
+config.kM = 1.36e-7;   % Coefficiente di drag (Nm / (rad/s)^2)
+
+% Limiti dei motori (Saturazione)
+config.w_min = 150;    % Idle speed minima (rad/s)
+config.w_max = 800;    % Max RPM (~7600 RPM convertiti in rad/s)
+
+%% ========= CONTROLLO DI SICUREZZA DI REALIZZABILITà DELLA TRAIETTORIA ===
+mission_possible = check_feasibility(times_current, c_current, config);
+
 %% ==========================================================
-% AVVIO SIMULAZIONE AD ANELLO CHIUSO
+% SIMULAZIONE AD ANELLO CHIUSO
 % ===========================================================
 
 % Parametri di simulazione
 config.dt = 0.001; 
-fprintf('\n--- Avvio Simulazione 3D in corso ---\n');
+config.warning_cooldown = 0.03;
 
-% Passiamo i tempi ottimizzati (times_current) e i coefficienti (c_current)
-simulate_flight(times_current, c_current, waypoints, config);
+if mission_possible
+    fprintf(['--- Avvio Simulazione 3D in corso ---\n' ...
+             '  - Traiettoria consentita dai limiti prestazionali -   \n   ']);
+    simulate_flight(times_current, c_current, waypoints, config);
+else
+    disp('SIMULAZIONE ABORTITA: La traiettoria richiede prestazioni oltre i limiti dei motori.');
+    disp('Suggerimento: Allenta l''ottimizzazione temporale o riduci l''aggressività della manovra.');
+    
+    % TODO: plottare la traiettoria puramente geometrica
+    % per vedere cosa avrebbe dovuto fare il drone ???
+end
