@@ -1,14 +1,42 @@
 function [c, total_cost] = trajectoryGen(times, waypoints, config)
-% trajectory generator function
+% TRAJECTORYGEN Genera una traiettoria ottimizzata per quadrirotori.
+%
+% Questa funzione formula e risolve un problema di Programmazione Quadratica (QP)
+% per calcolare i coefficienti polinomiali di una traiettoria multi-segmento.
+% Il problema viene risolto in modo disaccoppiato per le 4 dimensioni: 
+% X, Y, Z (solitamente minimizzazione dello Snap) e Yaw (minimizzazione dell'accelerazione).
+%
+% INPUT:
+%   times     - Vettore [1 x M] dei tempi assoluti in cui il drone deve raggiungere i keyframes.
+%   waypoints - Matrice [M x 4] delle coordinate dei punti di passaggio [x, y, z, yaw].
+%   config    - Struttura dei parametri di simulazione contenente:
+%               * n_pos, n_yaw: Ordine dei polinomi per posizione e yaw.
+%               * k_pos, k_yaw: Ordine della derivata da minimizzare (es. 4 per lo Snap).
+%               * use_scaling: (Booleano) Attiva la mappatura adimensionale spaziale/temporale.
+%               * corridor_delta, corridor_samples: (Opzionali) Tolleranze e campionamenti per i Safe Corridors.
+%
+% OUTPUT:
+%   c          - Struttura contenente le matrici dei coefficienti polinomiali reali
+%                (coeff_x, coeff_y, coeff_z, coeff_psi). Ogni matrice ha dimensione [(n+1) x m].
+%   total_cost - Costo reale totale (somma degli integrali delle derivate quadrate) dell'intera
+%                traiettoria, calcolato prima della ricalibrazione dimensionale.
+%
+% FUNZIONALITÀ PRINCIPALI:
+%   1. Vincoli di Posizione: Garantisce il passaggio esatto per i waypoints.
+%   2. Continuità: Assicura che le derivate fino a (k-1) siano continue tra i segmenti.
+%   3. Condizioni al Contorno: Forza velocità e accelerazione a zero all'inizio e alla fine del volo.
+%   4. Stabilità Numerica: Previene problemi di condizionamento delle matrici tramite 
+%      adimensionalizzazione (scaling spaziale tramite beta1 e beta2, e temporale).
+%   5. Safe Corridors: Se richiesti, applica vincoli di disuguaglianza per costringere la
+%      traiettoria all'interno di "tubi" di tolleranza virtuali tra i waypoints.    
+
     M = size(waypoints, 1);  % Numero di keyframes
     m = M - 1;               % Numero di segmenti tra i keyframes
     n_pos = config.n_pos;
     n_yaw = config.n_yaw;
     k_pos = config.k_pos;
     k_yaw = config.k_yaw;
-
-    %TODO: metti qualcosa per scegliere quali segmenti hanno il corridoio
-        
+    
     % Leggiamo il flag per l'adimensionalizzazione temporale
     use_scaling = isfield(config, 'use_scaling') && config.use_scaling;
 
@@ -24,7 +52,7 @@ function [c, total_cost] = trajectoryGen(times, waypoints, config)
     debugStruct = struct();
     
     %% --- : RISOLUZIONE OTTIMIZZAZIONE (MINIMUM SNAP) ---
-    % Risolviamo separatamente per ogni dimensione (Proprietà di Disaccoppiamento)
+    % Risolviamo separatamente per ogni dimensione (Proprietà di Disaccoppiamento della Differential Flatness)
     
     for dim = 1:4 % [x y z yaw]
         if dim < 4  % [x y z]
@@ -43,7 +71,10 @@ function [c, total_cost] = trajectoryGen(times, waypoints, config)
         if use_scaling
             beta1 = mean(w_points); % Traslazione (Shift) impostato come media delle coordinate della dimensione selezionata
             beta2 = max(abs(w_points - beta1)); % Scala spaziale
-            if beta2 < 1e-4, beta2 = 1.0; end
+            if beta2 < 1e-4
+                beta2 = 1.0;% TODO: check
+                warning("beta2 was set to 1")
+            end  
             w_points_scaled = (w_points - beta1) / beta2; % Variabile w tilde
         else
             beta1 = 0; beta2 = 1.0; w_points_scaled = w_points;

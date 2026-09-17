@@ -4,35 +4,37 @@ clear; clc; close all;
 % ---  DEFINIZIONE MANUALE KEYFRAMES E TEMPI ---
 % Ogni riga di waypoints: [x, y, z, yaw]
 waypoints = [ 0,    0,   1,   0;        % Partenza (Hovering)
-              1,    0,   1, pi/4;     % Punto intermedio 1
+              1,    0,   1,   pi/6 ;   % Punto intermedio 1
               1,    2,   1, 3*pi/4;     % Punto intermedio 2
               0,    2,   1,  pi ];      % Ritorno
 
 % times: Vettore dei tempi di arrivo ai keyframes (t0, t1, ..., tm)
 % Nota: t0 deve essere 0.
-times = [0, 2.0, 5.0, 7.0]/2; 
+times = [0, 2.5, 7.0, 10.0]/2; 
 
 assert(size(waypoints,1) == length(times))
 
 % --- CONFIGURAZIONE OTTIMIZZAZIONE ---
+% -- ORDINE POLINOMI di traiettoria -- 
 config.n_pos = 7; % Grado/order polinomi posizione (minimo snap richiede derivate fino alla 4a)
 % poichè ogni segmento (intervallo tra due wp) ha 2 estremità e se serve
 % imporre la continuità di posizione velocità, accelerazione e jerk su
 % entrambi i lati servono 8 condizioni al contorno, 4 per lato. Un
 % polinomio di ordine 7 ha 8 coefficienti. Potenzialmente si potrebbe
 % imporre la continuità anche del jerk con n=9.
-config.n_yaw = 3; % Grado/order polinomi yaw (minimo accel. richiede derivate fino alla 2a)
+config.n_yaw = 3; % Grado/order polinomi yaw (minimo accel. richiede derivate fino alla 2a, per vincolare posiz e veloc angolare di yaw)
+% -- GRADO DELLE DERIVATE DA MINIMIZZARE -- 
 config.k_pos = 4; % (4, snap)
 config.k_yaw = 2; % (2, Accelerazione Yaw)
 
 %  -- Parametri per Safe Corridors
 % Inf = nessun vincolo, numero = ampiezza massima deviazione (metri)
-config.corridor_delta = [Inf, 0.05, Inf]; 
+config.corridor_delta = [Inf , 0.2, Inf]; 
 
 assert( size(waypoints,1) == length(times) && size(waypoints,1) == length(config.corridor_delta)+1 )
 
 % Quanti punti controllare all'interno di un segmento attivo
-config.corridor_samples = 3;
+config.corridor_samples = 7;
 
 % -- Temporal scaling
 config.use_scaling = true;
@@ -74,30 +76,54 @@ plot_trajectory_evolution(waypoints, times, c_init, times_current, c_current, co
 %% ====================    SIMULAZIONE  ====================
 
 % PARAMETRI FISICI DEL QUADRIROTORE (PLANT)
-config.mass = 1.0; % Massa in kg
+% massa e gravità
+config.mass = 5.4; % Massa in kg
 config.g = 9.81;   % Accelerazione di gravità (m/s^2)
 
 % Matrice di inerzia J (kg * m^2) lungo gli assi x_B, y_B, z_B
-config.J = diag([0.01, 0.01, 0.02]); 
-
-% GUADAGNI DEL CONTROLLORE GEOMETRICO 
-% ===========================================================
-% Tuning del loop di Posizione (Traslazionale)
-config.Kp = 15.0; % Reattività all'errore di posizione
-config.Kv = 6.0;  % Smorzamento all'errore di velocità
-
-% Tuning del loop di Assetto (Rotazionale)
-config.KR = 8.0;     % Reattività all'errore di orientamento (Roll, Pitch, Yaw)
-config.Komega = 1.5; % Smorzamento all'errore di velocità angolare (p, q, r)
+config.J = [0.509560, 0.000070, 0.000125
+            0.000070, 0.528320, 0.000015 
+            0.000125, 0.000015, 0.933390 ];  % [kg * m^2]
 
 % Parametri aerodinamici e geometrici
-config.L = 0.17;       % Lunghezza braccio (m)
-config.kF = 8.548e-6;  % Coefficiente di spinta (N / (rad/s)^2)
-config.kM = 1.36e-7;   % Coefficiente di drag (Nm / (rad/s)^2)
+config.L = 0.17;                   % Lunghezza braccio (m)
+config.kF = 2.4*1e-5; % 8.548e-6;  % Coefficiente di spinta (N / (rad/s)^2)
+config.kM = 1.22e-6;  % 1.36e-7;   % Coefficiente di drag (Nm / (rad/s)^2)
 
 % Limiti dei motori (Saturazione)
 config.w_min = 150;    % Idle speed minima (rad/s)
 config.w_max = 800;    % Max RPM (~7600 RPM convertiti in rad/s)
+
+% =========================================================
+% TUNING ANALITICO DEI GUADAGNI (Pole Placement)
+% =========================================================
+% 1. Parametri di Risposta desiderata
+zeta = 1.0;          % Smorzamento critico (1.0 = massima reattività senza oscillazioni)
+wn_pos = 3.0;        % Frequenza naturale Posizione (rad/s) -> Reattività lenta e fluida
+wn_att = 15.0;       % Frequenza naturale Assetto (rad/s) -> Deve essere circa 5x wn_pos
+
+% 2. OUTER LOOP (Posizione) - Scalato linearmente sulla Massa
+kp_base = config.mass * wn_pos^2;
+kv_base = 2 * config.mass * zeta * wn_pos;
+
+% Creiamo le matrici diagonali (asse Z leggermente più rigido per la gravità)
+config.Kp = diag([kp_base, kp_base, kp_base * 1.5]); 
+config.Kv = diag([kv_base, kv_base, kv_base * 1.5]);
+
+% 3. INNER LOOP (Assetto) - Scalato matricialmente sull'Inerzia (J)
+% Poiché J è già una matrice 3x3 che contiene le inerzie specifiche (Ixx, Iyy, Izz)
+% moltiplicando per lo scalare wn_att^2 otteniamo la matrice K_R perfetta.
+config.KR = config.J * (wn_att^2); 
+config.Komega = config.J * (2 * zeta * wn_att);
+
+% % 
+% % % Tuning del loop di Posizione (Traslazionale)
+% % config.Kp = diag([15.0, 15.0, 30.0]); % Reattività all'errore di posizione
+% % config.Kv = diag([8.0, 8.0, 15.0]);  % Smorzamento all'errore di velocità
+% % 
+% % % Tuning del loop di Assetto (Rotazionale)
+% % config.KR = diag([3.0, 3.0, 1.5]);     % Reattività all'errore di orientamento (Roll, Pitch, Yaw)
+% % config.Komega = diag([0.5, 0.5, 0.3]); % Smorzamento all'errore di velocità angolare (p, q, r)
 
 %% ========= CONTROLLO DI SICUREZZA DI REALIZZABILITà DELLA TRAIETTORIA ===
 mission_possible = check_feasibility(times_current, c_current, config);
@@ -110,12 +136,33 @@ mission_possible = check_feasibility(times_current, c_current, config);
 config.dt = 0.001; 
 config.warning_cooldown = 0.03;
 
+% --- INIZIO LOOP DI SALVATAGGIO ---
+max_retries = 5; 
+retries = 0;
+
+while ~mission_possible && retries < max_retries
+    retries = retries + 1;
+    fprintf('\n [Fix missione] Tentativo %d: Dilato il tempo totale del 5%%...\n', retries);
+    
+    % LA MAGIA DELLO SCALO TEMPORALE: Moltiplichiamo l'intero vettore
+    times_current = times_current * 1.05; 
+    
+    % Poiché i tempi assoluti sono cambiati, dobbiamo ricalcolare 
+    % velocemente i coefficienti dimensionali. L'ottimizzatore ci metterà
+    % una frazione di secondo perché la forma spaziale è la stessa.
+    [c_current, ~] = trajectoryGen(times_current, waypoints, config);
+    
+    % Ri-testiamo la nuova traiettoria rallentata
+    mission_possible = check_feasibility(times_current, c_current, config);
+end
+% --- FINE LOOP DI SALVATAGGIO ---
+
 if mission_possible
     fprintf(['--- Avvio Simulazione 3D in corso ---\n' ...
              '  - Traiettoria consentita dai limiti prestazionali -   \n   ']);
     simulate_flight(times_current, c_current, waypoints, config);
 else
-    disp('SIMULAZIONE ABORTITA: La traiettoria richiede prestazioni oltre i limiti dei motori.');
+    disp('SIMULAZIONE ABORTITA: Anche allungando i tempi, la traiettoria richiede prestazioni oltre i limiti dei motori.');
     disp('Suggerimento: Allenta l''ottimizzazione temporale o riduci l''aggressività della manovra.');
     
     % TODO: plottare la traiettoria puramente geometrica

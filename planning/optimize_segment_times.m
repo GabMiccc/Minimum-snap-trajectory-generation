@@ -87,9 +87,6 @@ function [times_opt, c_opt, cost_history] = optimize_segment_times(times, waypoi
             % Ripristina la somma esatta di T per compensare arrotondamenti
             T = T_new * (sum(T) / sum(T_new)); 
         end
-
-        
-
     end
     
     % --- RESTITUZIONE RISULTATI MIGLIORI ---

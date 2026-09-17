@@ -10,6 +10,8 @@ function is_feasible = check_feasibility(times, c_opt, config)
     max_total_thrust = 4 * config.kF * config.w_max^2;
     min_total_thrust = 4 * config.kF * config.w_min^2;
     
+    max_total_thrust = max_total_thrust * 0.90; % TODO: vedi se serve questo safe factor, per riservare
+
     fprintf('--- Analisi di Fattibilità Traiettoria ---\n');
     
     for i = 1:length(t_eval)

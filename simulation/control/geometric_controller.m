@@ -32,6 +32,25 @@ function u = geometric_controller(state, state_des, config, t)
     % Forza Desiderata (Eq. Mellinger: F_des = -Kp*ep - Kv*ev + mg*e3 + m*a_des)
     F_des = -Kp * ep - Kv * ev + m * g * e3 + m * state_des.acc;
     
+    % -----------------------------------------------------------
+    % --- TILT LIMIT (Sicurezza Anti-Ribaltamento) ---
+    % Estraiamo la componente verticale (Z) e orizzontale (X,Y) della forza
+    fz = F_des(3);
+    fxy_norm = norm(F_des(1:2));
+    
+    % Definiamo l'angolo massimo (puoi anche spostarlo nel config in futuro)
+    max_tilt_angle = deg2rad(90); % Non superare mai i 45 gradi
+    
+    % Calcoliamo il limite massimo della forza orizzontale per questo fz
+    max_fxy = fz * tan(max_tilt_angle); 
+    
+    % Se chiediamo troppo tilt e non stiamo precipitando attivamente (fz > 0)
+    if fxy_norm > max_fxy && fz > 0
+        % Scaliamo il vettore orizzontale per rientrare nel cono di sicurezza
+        F_des(1:2) = F_des(1:2) * (max_fxy / fxy_norm);
+    end
+    % -----------------------------------------------------------
+    
     % Asse Z attuale del drone (Body frame Z proiettato nel World frame)
     z_B = state.Rbw * e3; 
     
@@ -97,7 +116,7 @@ function u = geometric_controller(state, state_des, config, t)
           err_matrix(2,1)];     % [ _ 1 _ ]
     % questo è un vettore la cui direzione è l'asse attorno cui dovrebbe ruotare il drone per correggere la direzione
           
-    % Velocità angolare desiderata  ( TODO: necessità di JERK input)
+    % Velocità angolare desiderata  
     p_des = -(m / u1) * dot(state_des.jerk, y_B_des);
     q_des =  (m / u1) * dot(state_des.jerk, x_B_des);
     r_des = state_des.yaw_dot * dot(e3, z_B_des);
