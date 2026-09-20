@@ -20,7 +20,7 @@ function H = compute_H_matrix(n, k, T_start, T_end)
 
             % Integrale analitico standard da T_start a T_end.
             % l'adimensionalizzaazione (se c'è) viene fatta fuori
-            H(i+1, j+1) = mult * (T_end^exp_val - T_start^exp_val) / exp_val;
+            H(i+1, j+1) = mult * (T_end^exp_val - T_start^exp_val) / exp_val; % termine Hij della matrice
         end
     end
 end

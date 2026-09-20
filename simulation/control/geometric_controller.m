@@ -15,6 +15,9 @@ function u = geometric_controller(state, state_des, config, t)
     Kp = config.Kp; Kv = config.Kv;
     KR = config.KR; Kw = config.Komega;
     
+    % MAX TILT
+    max_tilt_angle_deg = config.max_tilt_angle_deg;
+
     % Inizializza la variabile di memoria per il cooldown dei warning
     persistent last_warning_time;
     % Se è la prima volta che gira, o se la simulazione è ripartita da zero (t < last), resetta
@@ -39,7 +42,7 @@ function u = geometric_controller(state, state_des, config, t)
     fxy_norm = norm(F_des(1:2));
     
     % Definiamo l'angolo massimo (puoi anche spostarlo nel config in futuro)
-    max_tilt_angle = deg2rad(90); % Non superare mai i 45 gradi
+    max_tilt_angle = deg2rad(max_tilt_angle_deg); % Non superare mai i 45 gradi
     
     % Calcoliamo il limite massimo della forza orizzontale per questo fz
     max_fxy = fz * tan(max_tilt_angle); 
@@ -89,7 +92,7 @@ function u = geometric_controller(state, state_des, config, t)
     % 3. VERIFICA STABILITÀ ESPONENZIALE ---
     % Psi = 1/2 * trace(I - R_des^T * R)
 
-    Psi = 0.5 * trace(eye(3) - R_des' * state.Rbw);
+    Psi = 0.5 * trace(eye(3) - R_des' * state.Rbw);  % replica 1:1 della formula nel paper
     if (t - last_warning_time) >= config.warning_cooldown
         if Psi >= 2.0
             warning('ATTENZIONE (t=%.2fs): Stabilità esponenziale persa! Errore di assetto > 180 gradi (Psi = %.2f)', t, Psi);        
@@ -105,7 +108,7 @@ function u = geometric_controller(state, state_des, config, t)
     % ===========================================================
     
     % Errore di Orientamento (eR)
-    % La formula del paper usa l'operatore "vee" che estrae il vettore da una matrice emisimmetrica.
+    % La formula del paper usa l'operatore "vee" che estrae il vettore da una matrice antiisimmetrica.
     % err_matrix = 1/2 * (R_des' * R_attuale - R_attuale' * R_des)
     err_matrix = 0.5 * (R_des' * state.Rbw - state.Rbw' * R_des);
     
@@ -139,9 +142,10 @@ function u = geometric_controller(state, state_des, config, t)
 
     % Errore di Velocità Angolare (ew)
     ew = state.omega_BW - (state.Rbw' * R_des * omega_des);
-    
+    %     veloc ang                 veloc ang 
+    %     misurata                  target
     %% CLOSING THE LOOP, calcolo dei momenti desiderati
-    % Momenti Torcenti (Torques: u2, u3, u4)
+    % Momenti Torcenti ( u2, u3, u4)
     tau = -KR * eR - Kw * ew;
 
     %% ==========================================================

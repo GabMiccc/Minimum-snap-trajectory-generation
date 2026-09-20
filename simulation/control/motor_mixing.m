@@ -1,5 +1,9 @@
 function u_real = motor_mixing(u_ideal, config)
     % MOTOR_MIXING Converte i comandi ideali in RPM reali applicando i limiti fisici
+    % Nella sua V1.0 è solo filtro HardWare
+    % 1. converte u_ideal nelle 4 rotazioni quadre dei singoli motori
+    % 2. le clampa tutte al limite fisico reale
+    % 3. ricalcola spinta e momenti e li passa al motore dinamico
     
     % Estrazione parametri costruttivi
     kF = config.kF; 

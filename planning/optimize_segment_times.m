@@ -40,8 +40,9 @@ function [times_opt, c_opt, cost_history] = optimize_segment_times(times, waypoi
         
         % 3. Calcolo del gradiente direzionale numerico
         grad = zeros(1, m);
-        for i = 1:m
-            % Costruisci il vettore g_i per ridistribuire il tempo
+        for i = 1:m % per ogni segmento i-esimo
+            % Costruisci il vettore direzionale g_i per ridistribuire il
+            % tempo aggiungendo h all' i-esimo segmento
             g_i = ones(1, m) * (-1 / (m - 1));   
             g_i(i) = 1;  
             
@@ -54,6 +55,8 @@ function [times_opt, c_opt, cost_history] = optimize_segment_times(times, waypoi
             
             % Derivata direzionale
             grad(i) = (cost_perturbed - cost_base) / h;
+            % Se grad(i) < 0: aggiungere tempo al segmento i fa diminuire il costo  
+            % Se grad(i) > 0: aggiungere tempo al segmento i fa aumentare il costo
         end
         
         % 4. Aggiorna i tempi T 
@@ -61,7 +64,7 @@ function [times_opt, c_opt, cost_history] = optimize_segment_times(times, waypoi
             % --- VERO BACKTRACKING --- (monotono)
             lr = learning_rate;  % Parte con un passo coraggioso
             while true
-                T_new = T - lr * grad;
+                T_new = T - lr * grad; % scendiamo lungo il gradiente (se grad > 0 tocca muoversi al contrario, indi per cui il meno)
                 T_new = max(T_new, 0.1); % Evita tempi negativi o nulli
                 T_new = T_new * (sum(T) / sum(T_new)); % Mantieni il tempo totale costante
         
@@ -75,6 +78,9 @@ function [times_opt, c_opt, cost_history] = optimize_segment_times(times, waypoi
                     break; % Esci dal ciclo while e vai alla prossima iterazione del gradiente
                 else
                     % Se il costo esplode, il passo era troppo lungo: dimezzalo e riprova
+                    % nella direzione definita dal gradiente c'è
+                    % sicuramente un "meglio" locale ma potremmo
+                    % scavalcarlo con un passo troppo grande
                     lr = lr / 2;
                 end
             end
@@ -96,3 +102,10 @@ function [times_opt, c_opt, cost_history] = optimize_segment_times(times, waypoi
     fprintf('--- Ottimizzazione Completata ---\n\n');
     fprintf('Miglior costo applicato alla traiettoria finale: %.2f\n\n', best_cost);
 end
+
+
+
+
+% NOTA: controlla se il paper lascia libero il tempo totale
+% nell'ottimizzaizone dei segmenti temporali. Può essere che l'algoritmo
+% ecide il tempo di volo

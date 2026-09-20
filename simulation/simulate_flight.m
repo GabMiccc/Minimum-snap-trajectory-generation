@@ -96,13 +96,14 @@ function simulate_flight(times, c_opt, waypoints, config)
         state_dot = quadrotor_dynamics(state_real, u_real, config);
         
         % Step di Eulero
-        state_real.pos = state_real.pos + state_dot.pos * dt;
-        state_real.vel = state_real.vel + state_dot.vel * dt;
+        state_real.pos      = state_real.pos + state_dot.pos * dt;
+        state_real.vel      = state_real.vel + state_dot.vel * dt;
         state_real.omega_BW = state_real.omega_BW + state_dot.omega_BW * dt;
         
-        % Aggiornamento Matrice di Rotazione (con ri-ortogonalizzazione SVD)
+        % Aggiornamento Matrice di Rotazione (con ri-ortogonalizzazione
+        % SVD) problema di Procruste Ortogonale
         state_real.Rbw = state_real.Rbw + state_dot.Rbw * dt;
-        [U, ~, V] = svd(state_real.Rbw);
+        [U, ~, V] = svd(state_real.Rbw); % elimina le deformazioni di scala accumulatesi in Rbw
         state_real.Rbw = U * V'; % Garantisce che rimanga una pura rotazione ortogonale
         
         % Salvataggio scia

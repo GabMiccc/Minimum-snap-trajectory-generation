@@ -69,11 +69,12 @@ function [c, total_cost] = trajectoryGen(times, waypoints, config)
 
         % --- PARAMETRI DEL DOCUMENTO (beta1, beta2) ---
         if use_scaling
-            beta1 = mean(w_points); % Traslazione (Shift) impostato come media delle coordinate della dimensione selezionata
-            beta2 = max(abs(w_points - beta1)); % Scala spaziale
+            % Traslazione (Shift) impostato come media delle coordinate della dimensione selezionata
+            beta1 = mean(w_points);  % posiz media
+            beta2 = max(abs(w_points - beta1)); % ampiezza massima
             if beta2 < 1e-4
                 beta2 = 1.0;% TODO: check
-                warning("beta2 was set to 1")
+                %warning("beta2 was set to 1 for dimension %d", dim)
             end  
             w_points_scaled = (w_points - beta1) / beta2; % Variabile w tilde
         else

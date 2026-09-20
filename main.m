@@ -10,7 +10,7 @@ waypoints = [ 0,    0,   1,   0;        % Partenza (Hovering)
 
 % times: Vettore dei tempi di arrivo ai keyframes (t0, t1, ..., tm)
 % Nota: t0 deve essere 0.
-times = [0, 2.5, 7.0, 10.0]/2; 
+times = [0, 2.5, 7.0, 10.0]/1.5; 
 
 assert(size(waypoints,1) == length(times))
 
@@ -49,9 +49,9 @@ plot_trajectory(waypoints, times, c_init, config)
 
 % Parametri discesa del gradiente
 config.opt_max_iter = 20;
-config.opt_h = 1e-4; % Perturbazione per il gradiente numerico
-config.opt_learning_rate = 0.5; % Passo di discesa
-config.opt_use_backtracking = true;                                        % SET
+config.opt_h = 1e-4; % Perturbazione (preferibilmente più infinitesima possibile) per il gradiente numerico
+config.opt_learning_rate = 0.5; % Passo di discesa/apprendimento iniziale
+config.opt_use_backtracking = true;                                        
 
 % OTTIMIZZAZIONE
 [times_current, c_current, cost_history] = optimize_segment_times(times, waypoints, config);
@@ -98,13 +98,16 @@ config.w_max = 800;    % Max RPM (~7600 RPM convertiti in rad/s)
 % TUNING ANALITICO DEI GUADAGNI (Pole Placement)
 % =========================================================
 % 1. Parametri di Risposta desiderata
-zeta = 1.0;          % Smorzamento critico (1.0 = massima reattività senza oscillazioni)
-wn_pos = 3.0;        % Frequenza naturale Posizione (rad/s) -> Reattività lenta e fluida
-wn_att = 15.0;       % Frequenza naturale Assetto (rad/s) -> Deve essere circa 5x wn_pos
+zeta = 1.0;                    % Smorzamento critico (1.0 = massima reattività senza oscillazioni)
+wn_pos = 3.0;      % (rad/s)   % Frequenza naturale Posizione (rad/s) -> Reattività lenta e fluida
+wn_att = 15.0;     % (rad/s)   % Frequenza naturale Assetto (rad/s) -> Deve essere circa 5x wn_pos
+% sistema sottodimensionato, per fare spostamenti laterali deve prima
+% inclinarsi e poi spingere -> assetto più veloce di posizione, è l'inner
+% loop
 
 % 2. OUTER LOOP (Posizione) - Scalato linearmente sulla Massa
 kp_base = config.mass * wn_pos^2;
-kv_base = 2 * config.mass * zeta * wn_pos;
+kv_base = 2 * config.mass * zeta * wn_pos; 
 
 % Creiamo le matrici diagonali (asse Z leggermente più rigido per la gravità)
 config.Kp = diag([kp_base, kp_base, kp_base * 1.5]); 
@@ -116,6 +119,9 @@ config.Kv = diag([kv_base, kv_base, kv_base * 1.5]);
 config.KR = config.J * (wn_att^2); 
 config.Komega = config.J * (2 * zeta * wn_att);
 
+% il controllore non lineare SO(3) necessita di queste 4 matrici di
+% guadagno
+
 % % 
 % % % Tuning del loop di Posizione (Traslazionale)
 % % config.Kp = diag([15.0, 15.0, 30.0]); % Reattività all'errore di posizione
@@ -126,6 +132,8 @@ config.Komega = config.J * (2 * zeta * wn_att);
 % % config.Komega = diag([0.5, 0.5, 0.3]); % Smorzamento all'errore di velocità angolare (p, q, r)
 
 %% ========= CONTROLLO DI SICUREZZA DI REALIZZABILITà DELLA TRAIETTORIA ===
+config.max_tilt_angle_deg = 45;  % deg
+
 mission_possible = check_feasibility(times_current, c_current, config);
 
 %% ==========================================================
@@ -137,7 +145,7 @@ config.dt = 0.001;
 config.warning_cooldown = 0.03;
 
 % --- INIZIO LOOP DI SALVATAGGIO ---
-max_retries = 5; 
+max_retries = 10;
 retries = 0;
 
 while ~mission_possible && retries < max_retries
