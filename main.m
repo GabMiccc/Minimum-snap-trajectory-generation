@@ -1,16 +1,17 @@
 % SCRIPT DI GENERAZIONE TRAIETTORIA - QUADRICOTTERO
 clear; clc; close all;
+addpath(genpath(pwd));
 
 % ---  DEFINIZIONE MANUALE KEYFRAMES E TEMPI ---
 % Ogni riga di waypoints: [x, y, z, yaw]
 waypoints = [ 0,    0,   1,   0;        % Partenza (Hovering)
-              1,    0,   1,   pi/6 ;   % Punto intermedio 1
-              1,    2,   1, 3*pi/4;     % Punto intermedio 2
-              0,    2,   1,  pi ];      % Ritorno
+              4,    0,   2,   pi/6 ;   % Punto intermedio 1
+              4,    3,   2, 3*pi/4;     % Punto intermedio 2
+              0,    3,   1,  pi ];      % Ritorno
 
 % times: Vettore dei tempi di arrivo ai keyframes (t0, t1, ..., tm)
 % Nota: t0 deve essere 0.
-times = [0, 2.5, 7.0, 10.0]/1.5; 
+times = [0, 5.0, 10.0, 13.0]; 
 
 assert(size(waypoints,1) == length(times))
 
@@ -38,7 +39,10 @@ config.corridor_samples = 7;
 
 % -- Temporal scaling
 config.use_scaling = true;
-
+% --- DEFINIZIONE SCENARIO ACROBATICO 3D (Anello a 8 Non Complanare) ---
+[waypoints, times, config_scenario] = scenario_figure8_3d();
+config.corridor_delta = config_scenario.corridor_delta;
+config.corridor_samples = config_scenario.corridor_samples;
 %% generazione traiettoria minimum snap
 [c_init, ~] = trajectoryGen(times, waypoints, config);
 

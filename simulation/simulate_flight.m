@@ -21,6 +21,7 @@ function simulate_flight(times, c_opt, waypoints, config)
     time_history = 0:dt:t_end;
     N_steps = length(time_history);
     pos_history = zeros(3, N_steps);
+    pos_des_history = zeros(3, N_steps);
     
     % Pre-allocazione per i log di performance
     err_pos_history = zeros(3, N_steps);
@@ -88,7 +89,7 @@ function simulate_flight(times, c_opt, waypoints, config)
         state_des.yaw_dot = vyaw;
         
         % B. CONTROLLORE GEOMETRICO
-        u_ideal = geometric_controller(state_real, state_des, config, t);
+        u_ideal = controller_selector(state_real, state_des, config, t);
         % FILTRO saturazione motori
         u_real = motor_mixing(u_ideal, config);
         
@@ -108,6 +109,7 @@ function simulate_flight(times, c_opt, waypoints, config)
         
         % Salvataggio scia
         pos_history(:, i) = state_real.pos;
+        pos_des_history(:, i) = state_des.pos;
         
         % Salvataggio dati per il Sanity Check
         err_pos_history(:, i) = state_real.pos - state_des.pos;
@@ -123,7 +125,7 @@ function simulate_flight(times, c_opt, waypoints, config)
     end
     
     disp('Simulazione Terminata!');
-        %% --- PLOT PERFORMANCE (Il nostro Sanity Check) ---
+        %% --- PLOT PERFORMANCE ---
     figure('Name', 'Analisi Performance', 'Color', 'w', 'Position', [100, 100, 800, 300]);
     
     % Riquadro 1: Errore di Posizione (X, Y, Z)
@@ -144,4 +146,8 @@ function simulate_flight(times, c_opt, waypoints, config)
     xlabel('Time (s)'); ylabel('Velocity (m/s)');
     legend('desired', 'actual', 'Location', 'best');
     title('Velocity Profile');
+
+
+    metrics = compute_metrics(time_history, pos_history, pos_des_history, vel_real_history, vel_des_history, config);
+
 end
