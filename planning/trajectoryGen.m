@@ -62,7 +62,10 @@ function [c, total_cost] = trajectoryGen(times, waypoints, config)
         else
             n = n_yaw;
             k = k_yaw; % k_psi = 2 (Accelerazione Yaw)
-            w_points = waypoints(:, dim);
+            % w_points = waypoints(:, dim);   % 19/10 major bugfix: se non si
+            % unwrappa l'angolo yaw si hanno discontinuità nel valore di
+            % yaw
+            w_points = unwrap(waypoints(:, dim)); 
         end
     
         % use_scaling = isfield(config, 'use_scaling') && config.use_scaling;

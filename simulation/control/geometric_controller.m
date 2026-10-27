@@ -48,7 +48,13 @@ function u = geometric_controller(state, state_des, config, t)
     max_fxy = fz * tan(max_tilt_angle); 
     
     % Se chiediamo troppo tilt e non stiamo precipitando attivamente (fz > 0)
-    if fxy_norm > max_fxy && fz > 0
+    if fxy_norm > max_fxy % && fz > 0 
+    % 18/10: nota sulla seconda condizione dell'if
+    %  - non stiamo precipitando attivamente (fz > 0)
+    %  - stiamo precipitando                 (fz < 0) , ma in realtà no
+    %  perchè succede che fz (Fdes_z) può essere negativo anche se il drone
+    %  vuole attivamente scendere
+    %    
         % Scaliamo il vettore orizzontale per rientrare nel cono di sicurezza
         F_des(1:2) = F_des(1:2) * (max_fxy / fxy_norm);
     end
@@ -91,6 +97,7 @@ function u = geometric_controller(state, state_des, config, t)
     %% ==========================================================
     % 3. VERIFICA STABILITÀ ESPONENZIALE ---
     % Psi = 1/2 * trace(I - R_des^T * R)
+    % psi misura l'errore tra assetto attuale e desiderato
 
     Psi = 0.5 * trace(eye(3) - R_des' * state.Rbw);  % replica 1:1 della formula nel paper
     if (t - last_warning_time) >= config.warning_cooldown

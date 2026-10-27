@@ -94,7 +94,7 @@ function simulate_flight(times, c_opt, waypoints, config)
         u_real = motor_mixing(u_ideal, config);
         
         % C. DINAMICA E INTEGRAZIONE
-        state_dot = quadrotor_dynamics(state_real, u_real, config);
+        state_dot = quadrotor_dynamics(state_real, u_real, config, t);
         
         % Step di Eulero
         state_real.pos      = state_real.pos + state_dot.pos * dt;

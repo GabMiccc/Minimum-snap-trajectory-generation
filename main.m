@@ -47,7 +47,7 @@ config.corridor_samples = config_scenario.corridor_samples;
 [c_init, ~] = trajectoryGen(times, waypoints, config);
 
 %% PLOT TRAJECTORY
-plot_trajectory(waypoints, times, c_init, config)
+plot_trajectory(waypoints, times, c_init, config) % TODO : fix total z axis has to see all the traj, also figure the pos vel acc jerk snap profiles
 
 %% OPTIMAL SEGMENT TIMES
 
@@ -58,7 +58,7 @@ config.opt_learning_rate = 0.5; % Passo di discesa/apprendimento iniziale
 config.opt_use_backtracking = true;                                        
 
 % OTTIMIZZAZIONE
-[times_current, c_current, cost_history] = optimize_segment_times(times, waypoints, config);
+[times_current, c_current, cost_history] = optimize_segment_times(times, waypoints, config); % spara trajectoryGen() in maniera iterativa
 
 %% Visualizzazione dell'Evoluzione del Costo
 % se ci sono output enormi ci sarà overshoot (passo apprendimento troppo
@@ -77,7 +77,7 @@ ylim([min(cost_history)*0.95, max(cost_history)*1.05]);
 % times_current e c_current contengono i valori dell'ultima iterazione
 plot_trajectory_evolution(waypoints, times, c_init, times_current, c_current, config);
 
-%% ====================    SIMULAZIONE  ====================
+%% ==================== SETUP SIMULAZIONE  ====================
 
 % PARAMETRI FISICI DEL QUADRIROTORE (PLANT)
 % massa e gravità
@@ -96,10 +96,32 @@ config.kM = 1.22e-6;  % 1.36e-7;   % Coefficiente di drag (Nm / (rad/s)^2)
 
 % Limiti dei motori (Saturazione)
 config.w_min = 150;    % Idle speed minima (rad/s)
-config.w_max = 800;    % Max RPM (~7600 RPM convertiti in rad/s)
+config.w_max = 800;    % Max RPM (~7600 RPM convertiti in rad/s)  % TODO check
 
 % =========================================================
-% TUNING ANALITICO DEI GUADAGNI (Pole Placement)
+% CONFIGURAZIONE DISTURBI AMBIENTALI (Vento / Drag / Raffiche)
+% =========================================================
+config.wind.enable = true;                  % Attiva/Disattiva i disturbi ambientali
+
+% 1. Vento Costante Manuale (N) [X, Y, Z]
+config.wind.constant_force = [5.0; 5.0; 0.0]; % Impostare a [0;0;0] se si usa il vento random
+
+% 2. Vento Randomico Costante durante il Volo (Replicabile tramite Seed)
+config.wind.random_enable = false;           % Attiva la generazione di vento random
+config.wind.random_max_force = 2.0;         % Intensità massima della forza del vento (N)
+config.wind.random_seed = NaN;              % Seed di randomicità: se NaN genera seed casuale da clock e lo stampa a cruscotto
+
+% 3. Resistenza Aerodinamica (Drag Puntiforme)
+config.wind.k_drag = 0.05;                  % Coefficiente di drag aerodinamico (modello puntiforme)
+
+% 4. Raffiche di Vento Temporizzate (Wind Gusts)
+config.wind.gust_enable = false;            % Attiva raffiche temporizzate
+config.wind.gust_force = [2.5; 1.0; -0.5];  % Forza della raffica (N)
+config.wind.gust_start = 1.0;               % Tempo inizio raffica (s)
+config.wind.gust_end = 2.0;                 % Tempo fine raffica (s) 
+
+% =========================================================
+%% TUNING ANALITICO DEI GUADAGNI (Pole Placement)
 % =========================================================
 % 1. Parametri di Risposta desiderata
 zeta = 1.0;                    % Smorzamento critico (1.0 = massima reattività senza oscillazioni)
@@ -126,6 +148,8 @@ config.Komega = config.J * (2 * zeta * wn_att);
 % il controllore non lineare SO(3) necessita di queste 4 matrici di
 % guadagno
 
+config.controller_type =  "geometric";     %  " geometric | pid | lqr "
+
 % % 
 % % % Tuning del loop di Posizione (Traslazionale)
 % % config.Kp = diag([15.0, 15.0, 30.0]); % Reattività all'errore di posizione
@@ -138,7 +162,7 @@ config.Komega = config.J * (2 * zeta * wn_att);
 %% ========= CONTROLLO DI SICUREZZA DI REALIZZABILITà DELLA TRAIETTORIA ===
 config.max_tilt_angle_deg = 45;  % deg
 
-mission_possible = check_feasibility(times_current, c_current, config);
+mission_possible = check_feasibility_advanced(times_current, c_current, config);
 
 %% ==========================================================
 % SIMULAZIONE AD ANELLO CHIUSO
@@ -149,7 +173,7 @@ config.dt = 0.001;
 config.warning_cooldown = 0.03;
 
 % --- INIZIO LOOP DI SALVATAGGIO ---
-max_retries = 10;
+max_retries = 20;
 retries = 0;
 
 while ~mission_possible && retries < max_retries
