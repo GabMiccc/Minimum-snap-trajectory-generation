@@ -26,9 +26,10 @@ function plot_trajectory_evolution(waypoints, times_init, c_init, times_final, c
     subplot(1, 2, 1); hold on;
     
     % Disegno Corridoi se presenti
-    if isfield(config, 'corridor_delta')
+    if isfield(config, 'mission') && isfield(config.mission, 'corridor_delta') && ~isempty(config.mission.corridor_delta)
+        corridor_delta = config.mission.corridor_delta;
         for i = 1:m
-            d = config.corridor_delta(i);
+            d = corridor_delta(i);
             if ~isinf(d)
                 % Punti estremi del segmento
                 p1 = waypoints(i, 1:2);
@@ -89,7 +90,9 @@ function pos = sample_pos(t, times, c, config)
     T_end = times(idx+1);
     T_dur = T_end - T_start;
     
-    use_scaling = isfield(config, 'use_scaling') && config.use_scaling;
+    n_pos = config.planner.n_pos;
+    use_scaling = config.planner.use_scaling;
+
     if use_scaling
         % Se adimensionalizzato, mappa il tempo nell'intervallo [0, 1]
         if t >= times(end)
@@ -102,8 +105,8 @@ function pos = sample_pos(t, times, c, config)
         t_eval = t_eval_raw;
     end
 
-    basis = poly_basis(config.n_pos, 0, t_eval, T_dur, use_scaling);
-    pos(1) = basis * c.coeff_x(:, idx);
-    pos(2) = basis * c.coeff_y(:, idx);
-    pos(3) = basis * c.coeff_z(:, idx);
+    basis = poly_basis(n_pos, 0, t_eval, T_dur, use_scaling);
+    pos(1) = basis * c.coeff_x(idx, :)';
+    pos(2) = basis * c.coeff_y(idx, :)';
+    pos(3) = basis * c.coeff_z(idx, :)';
 end

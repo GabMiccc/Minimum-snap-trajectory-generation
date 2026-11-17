@@ -17,10 +17,15 @@ function is_feasible = check_feasibility(times, c_opt, config)
     t_eval = times(1) : dt_check : times(end);
     is_feasible = true;
     
-    % Estrazione parametri costruttivi
-    kF = config.kF; 
-    kM = config.kM; 
-    L  = config.L;  
+    % Estrazione parametri costruttivi del velivolo
+    d = config.drone;
+    kF = d.kF; 
+    kM = d.kM; 
+    L  = d.L;  
+    mass = d.mass;
+    g_acc = d.g;
+    w_min = d.w_min;
+    w_max = d.w_max;
 
     % Matrice di Mixing (Configurazione standard a '+')
     M = [ kF,    kF,    kF,    kF;
@@ -30,8 +35,8 @@ function is_feasible = check_feasibility(times, c_opt, config)
 
     % Calcolo dei limiti fisici di spinta del quadrirotore
     % La spinta totale massima è data da tutti e 4 i motori al massimo regime
-    max_total_thrust = 4 * config.kF * config.w_max^2;
-    min_total_thrust = 4 * config.kF * config.w_min^2;
+    max_total_thrust = 4 * kF * w_max^2;
+    min_total_thrust = 4 * kF * w_min^2;
     
     max_total_thrust = max_total_thrust * 0.90; % TODO: vedi se serve questo safe factor, per riservare
 
@@ -41,22 +46,23 @@ function is_feasible = check_feasibility(times, c_opt, config)
         t = t_eval(i);
         
         % Estrazione delle accelerazioni e dei jerk desiderate dai polinomi
-        [~, ~, ax, jx, ~] = eval_traj(c_opt.coeff_x, times, t, config.n_pos, config);
-        [~, ~, ay, jy, ~] = eval_traj(c_opt.coeff_y, times, t, config.n_pos, config);
-        [~, ~, az,  ~, ~] = eval_traj(c_opt.coeff_z, times, t, config.n_pos, config);
+        n_pos = config.planner.n_pos;
+        [~, ~, ax, jx, ~] = eval_traj(c_opt.coeff_x, times, t, n_pos, config);
+        [~, ~, ay, jy, ~] = eval_traj(c_opt.coeff_y, times, t, n_pos, config);
+        [~, ~, az,  ~, ~] = eval_traj(c_opt.coeff_z, times, t, n_pos, config);
         
         acc_des = [ax; ay; az];
 
         % Inversione della dinamica: Calcolo della forza totale richiesta
         % F_des = m * a_des + m * g * z_world
-        F_des = config.mass * acc_des + [0; 0; config.mass * config.g];
+        F_des = mass * acc_des + [0; 0; mass * g_acc];
         
         % La spinta propulsiva (u1) è la norma del vettore forza
         u1_req = norm(F_des);
         
         % stima momenti
-        tau_x_est = config.mass * jy * L; % Stima momento rollio
-        tau_y_est = -config.mass * jx * L; % Stima momento beccheggio
+        tau_x_est = mass * jy * L; % Stima momento rollio
+        tau_y_est = -mass * jx * L; % Stima momento beccheggio
 
         % vettore completo degli input idealmente da realizzare 
         u_ideal = [u1_req; tau_x_est; tau_y_est; 0];
@@ -75,7 +81,7 @@ function is_feasible = check_feasibility(times, c_opt, config)
             break;
         end
         % Controllo saturazione singoli motori
-        if any(omega_sq_req > config.w_max^2)
+        if any(omega_sq_req > w_max^2)
             fprintf('❌ ERRORE: Saturazione del singolo motore al tempo t=%.2fs!\n', t);
             is_feasible = false;
             break;

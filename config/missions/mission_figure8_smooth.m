@@ -1,4 +1,4 @@
-function [waypoints, times, config_scenario] = scenario_figure8_smooth()
+function [waypoints, times, config_scenario] = mission_figure8_smooth()
     % SCENARIO_FIGURE8_SMOOTH Traiettoria acrobatica 3D con Yaw srotolato (Unwrapped)
     %
     % Risolve la discontinuità di Yaw a 180° garantendo rotazioni progressive 
@@ -17,10 +17,20 @@ function [waypoints, times, config_scenario] = scenario_figure8_smooth()
          0.0,   0.0,  1.0,   2*pi          % 9. Ritorno origine (360° = giro completo fluido)
     ];
 
-    % Tempi proporzionati alle distanze (durata totale ~20s)
-    times = [0.0, 2.5, 5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0];
+    % Vettore colonna dei tempi proporzionati alle distanze (durata totale ~20s)
+    times = [
+        0.0;
+        2.5;
+        5.0;
+        7.5;
+        10.0;
+        12.5;
+        15.0;
+        17.5;
+        20.0
+    ];
 
     m = size(waypoints, 1) - 1;
-    config_scenario.corridor_delta = Inf(1, m);
+    config_scenario.corridor_delta = Inf(m, 1);
     config_scenario.corridor_samples = 5;
 end

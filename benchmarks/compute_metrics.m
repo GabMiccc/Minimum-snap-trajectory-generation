@@ -50,8 +50,8 @@ function metrics = compute_metrics(time_history, pos_real_history, pos_des_histo
     fprintf('\n=======================================================\n');
     fprintf('           REPORT BENCHMARK PRESTAZIONI DI VOLO        \n');
     fprintf('=======================================================\n');
-    if isfield(config, 'controller_type')
-        fprintf('  Controllore Utilizzato:   %s\n', upper(config.controller_type));
+    if isfield(config, 'control') && isfield(config.control, 'type')
+        fprintf('  Controllore Utilizzato:   %s\n', upper(config.control.type));
     end
     fprintf('  Durata Volo:              %.2f s\n', metrics.flight_duration);
     fprintf('  Lunghezza Traiettoria:    %.2f m\n', metrics.trajectory_length);

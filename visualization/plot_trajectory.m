@@ -2,12 +2,15 @@ function plot_trajectory(waypoints, times, c, config)
     ts = linspace(times(1), times(end), 500); % time samples (discretization)
     pos_ref = zeros(length(ts), 4); % [x, y, z, yaw]
     
+    n_pos = config.planner.n_pos;
+    n_yaw = config.planner.n_yaw;
+
     for i = 1:length(ts) % discretized time steps
         t = ts(i);
-        [pos_ref(i,1), ~, ~] = eval_traj(c.coeff_x, times, t, config.n_pos, config);
-        [pos_ref(i,2), ~, ~] = eval_traj(c.coeff_y, times, t, config.n_pos, config);
-        [pos_ref(i,3), ~, ~] = eval_traj(c.coeff_z, times, t, config.n_pos, config);
-        [pos_ref(i,4), ~, ~] = eval_traj(c.coeff_psi, times, t, config.n_yaw, config);
+        [pos_ref(i,1), ~, ~] = eval_traj(c.coeff_x, times, t, n_pos, config);
+        [pos_ref(i,2), ~, ~] = eval_traj(c.coeff_y, times, t, n_pos, config);
+        [pos_ref(i,3), ~, ~] = eval_traj(c.coeff_z, times, t, n_pos, config);
+        [pos_ref(i,4), ~, ~] = eval_traj(c.coeff_psi, times, t, n_yaw, config);
     end
     
     m = length(times) - 1; % Numero di segmenti
@@ -18,9 +21,10 @@ function plot_trajectory(waypoints, times, c, config)
     subplot(2,1,1); hold on;
     
     % DISEGNO CORRIDOI (X-Y)
-    if isfield(config, 'corridor_delta')
+    if isfield(config, 'mission') && isfield(config.mission, 'corridor_delta') && ~isempty(config.mission.corridor_delta)
+        corridor_delta = config.mission.corridor_delta;
         for i = 1:m
-            d = config.corridor_delta(i);
+            d = corridor_delta(i);
             if ~isinf(d) && ~isnan(d)
                 % Punti estremi del segmento
                 p1 = waypoints(i, 1:2);

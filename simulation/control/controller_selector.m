@@ -10,12 +10,8 @@ function u = controller_selector(state, state_des, config, t)
     % OUTPUT:
     %   u         - Vettore 4x1 comandi ideali [u1; tau_x; tau_y; tau_z]
 
-    % Controllo del tipo di controllore impostato in config (default: 'geometric')
-    if isfield(config, 'controller_type')
-        controller_type = config.controller_type;
-    else
-        controller_type = 'geometric';
-    end
+    % Selezione del tipo di controllore impostato
+    controller_type = config.control.type;
 
     switch lower(controller_type)
         case 'geometric'

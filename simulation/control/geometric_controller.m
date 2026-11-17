@@ -5,18 +5,20 @@ function u = geometric_controller(state, state_des, config, t)
     % anche jerk
     % config: struct parametri (m, g, Kp, Kv, KR, Komega)
 
-    % --- Estrazione Parametri ---
-    m = config.mass;
-    g = config.g;
+    % --- Estrazione Parametri Velivolo ---
+    m = config.drone.mass;
+    g = config.drone.g;
+    max_tilt_angle_deg = config.drone.max_tilt_angle_deg;
     e3 = [0; 0; 1]; % Versore Z del mondo
     
-    % Matrici di guadagno, possono essere matrici del tipo scalare*I se il
-    % drone reagisce con stessa forza su tutti gli assi
-    Kp = config.Kp; Kv = config.Kv;
-    KR = config.KR; Kw = config.Komega;
+    % Matrici di guadagno
+    Kp = config.control.Kp;
+    Kv = config.control.Kv;
+    KR = config.control.KR;
+    Kw = config.control.Komega;
     
-    % MAX TILT
-    max_tilt_angle_deg = config.max_tilt_angle_deg;
+    % Parametri simulazione
+    warning_cooldown = config.sim.warning_cooldown;
 
     % Inizializza la variabile di memoria per il cooldown dei warning
     persistent last_warning_time;
@@ -41,7 +43,8 @@ function u = geometric_controller(state, state_des, config, t)
     fz = F_des(3);
     fxy_norm = norm(F_des(1:2));
     
-    % Definiamo l'angolo massimo (puoi anche spostarlo nel config in futuro)
+    % Definiamo l'angolo massimo 
+    % protezione di sicurezza in anello chiuso. Anche se la traiettoria nominale è dolce, se nasce un grosso errore di posizione o velocità (ep, ev), il termine -Kp*ep - Kv*ev può chiedere una F_des(1:2) enorme, portando z_B_des quasi orizzontale (70°–80°)
     max_tilt_angle = deg2rad(max_tilt_angle_deg); % Non superare mai i 45 gradi
     
     % Calcoliamo il limite massimo della forza orizzontale per questo fz
@@ -100,7 +103,7 @@ function u = geometric_controller(state, state_des, config, t)
     % psi misura l'errore tra assetto attuale e desiderato
 
     Psi = 0.5 * trace(eye(3) - R_des' * state.Rbw);  % replica 1:1 della formula nel paper
-    if (t - last_warning_time) >= config.warning_cooldown
+    if (t - last_warning_time) >= warning_cooldown
         if Psi >= 2.0
             warning('ATTENZIONE (t=%.2fs): Stabilità esponenziale persa! Errore di assetto > 180 gradi (Psi = %.2f)', t, Psi);        
         elseif Psi >= 1.0

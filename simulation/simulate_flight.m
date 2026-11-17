@@ -2,8 +2,10 @@ function simulate_flight(times, c_opt, waypoints, config)
     % SIMULATE_FLIGHT Esegue la simulazione ad anello chiuso del quadrirotore
     
     %% --- 1. SETUP INIZIALE ---
-    dt = config.dt; % Passo di simulazione (100 Hz)
+    dt = config.sim.dt;
     t_end = times(end);
+    n_pos = config.planner.n_pos;
+    n_yaw = config.planner.n_yaw;
     
     % Inizializzazione dello stato reale (Struct)
     state_real.pos = waypoints(1, 1:3)'; % Parte dal primo waypoint
@@ -13,7 +15,7 @@ function simulate_flight(times, c_opt, waypoints, config)
     yaw0 = waypoints(1, 4);
     state_real.Rbw = [cos(yaw0), -sin(yaw0), 0; 
                       sin(yaw0),  cos(yaw0), 0; 
-                              0,          0, 1];
+                              0,          0, 1]; % parte orizzontale
                               
     state_real.omega_BW = [0; 0; 0];
     
@@ -51,9 +53,9 @@ function simulate_flight(times, c_opt, waypoints, config)
     for k = 1:length(t_ref)
         t = t_ref(k);
         % Valutiamo eval_traj separatamente per le 3 dimensioni spaziali
-        [px, ~, ~, ~, ~] = eval_traj(c_opt.coeff_x, times, t, config.n_pos, config);
-        [py, ~, ~, ~, ~] = eval_traj(c_opt.coeff_y, times, t, config.n_pos, config);
-        [pz, ~, ~, ~, ~] = eval_traj(c_opt.coeff_z, times, t, config.n_pos, config);
+        [px, ~, ~, ~, ~] = eval_traj(c_opt.coeff_x, times, t, n_pos, config);
+        [py, ~, ~, ~, ~] = eval_traj(c_opt.coeff_y, times, t, n_pos, config);
+        [pz, ~, ~, ~, ~] = eval_traj(c_opt.coeff_z, times, t, n_pos, config);
         
         pos_ref(:, k) = [px; py; pz];
     end
@@ -75,10 +77,10 @@ function simulate_flight(times, c_opt, waypoints, config)
         
         % A. VALUTAZIONE TRAIETTORIA (Estraiamo lo stato differenzialmente piatto)
         % Chiamiamo eval_traj per ogni dimensione separatamente
-        [px, vx, ax, jx, ~] = eval_traj(c_opt.coeff_x, times, t, config.n_pos, config);
-        [py, vy, ay, jy, ~] = eval_traj(c_opt.coeff_y, times, t, config.n_pos, config);
-        [pz, vz, az, jz, ~] = eval_traj(c_opt.coeff_z, times, t, config.n_pos, config);
-        [pyaw, vyaw, ~, ~, ~] = eval_traj(c_opt.coeff_psi, times, t, config.n_yaw, config);
+        [px, vx, ax, jx, ~] = eval_traj(c_opt.coeff_x, times, t, n_pos, config);
+        [py, vy, ay, jy, ~] = eval_traj(c_opt.coeff_y, times, t, n_pos, config);
+        [pz, vz, az, jz, ~] = eval_traj(c_opt.coeff_z, times, t, n_pos, config);
+        [pyaw, vyaw, ~, ~, ~] = eval_traj(c_opt.coeff_psi, times, t, n_yaw, config);
         
         % Assembliamo la struct desiderata
         state_des.pos = [px; py; pz];

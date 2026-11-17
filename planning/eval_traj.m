@@ -1,9 +1,10 @@
 function [pos, vel, acc, jerk, snap] = eval_traj(coeff, times, t, n, config)
-    % coeff: matrice (n+1) x m dei coefficienti calcolati
-    % times: vettore dei tempi dei keyframes [t0, t1, ..., tm]
+    % coeff: matrice [m x (n+1)] dei coefficienti calcolati (riga = segmento)
+    % times: vettore colonna [M x 1] dei tempi dei keyframes [t0, t1, ..., tm]
     % t: istante di tempo attuale
     % n: ordine del polinomio
     
+    times = times(:);
     m = length(times) - 1;
     
     % 1. Trova in quale segmento i si trova il tempo t
@@ -31,7 +32,7 @@ function [pos, vel, acc, jerk, snap] = eval_traj(coeff, times, t, n, config)
     T_end = times(idx+1);
     T_dur = T_end - T_start;
 
-    use_scaling = isfield(config, 'use_scaling') && config.use_scaling;
+    use_scaling = config.planner.use_scaling;
     if use_scaling
         % Se adimensionalizzato, mappa il tempo nell'intervallo [0, 1]
         if t >= times(end)
@@ -53,9 +54,10 @@ function [pos, vel, acc, jerk, snap] = eval_traj(coeff, times, t, n, config)
     basis_j = poly_basis(n, 3, t_eval, T_dur, use_scaling); % Jerk
     basis_s = poly_basis(n, 4, t_eval, T_dur, use_scaling); % Snap
 
-    pos = basis_p * coeff(:, idx);
-    vel = basis_v * coeff(:, idx);
-    acc = basis_a * coeff(:, idx);
-    jerk = basis_j * coeff(:, idx);
-    snap = basis_s * coeff(:, idx);
+    c_seg = coeff(idx, :)';
+    pos = basis_p * c_seg;
+    vel = basis_v * c_seg;
+    acc = basis_a * c_seg;
+    jerk = basis_j * c_seg;
+    snap = basis_s * c_seg;
 end

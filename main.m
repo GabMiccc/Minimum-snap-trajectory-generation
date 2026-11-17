@@ -2,69 +2,69 @@
 clear; clc; close all;
 addpath(genpath(pwd));
 
-% ---  DEFINIZIONE MANUALE KEYFRAMES E TEMPI ---
+% --- 1. DEFINIZIONE MANUALE KEYFRAMES E TEMPI (Opzionale / Sandbox) ---
 % Ogni riga di waypoints: [x, y, z, yaw]
 waypoints = [ 0,    0,   1,   0;        % Partenza (Hovering)
-              4,    0,   2,   pi/6 ;   % Punto intermedio 1
+              4,    0,   2,   pi/6 ;    % Punto intermedio 1
               4,    3,   2, 3*pi/4;     % Punto intermedio 2
               0,    3,   1,  pi ];      % Ritorno
 
-% times: Vettore dei tempi di arrivo ai keyframes (t0, t1, ..., tm)
+% times: Vettore colonna [M x 1] dei tempi di arrivo ai keyframes (t0, t1, ..., tm)
 % Nota: t0 deve essere 0.
-times = [0, 5.0, 10.0, 13.0]; 
+times = [0; 5.0; 10.0; 13.0]; 
 
-assert(size(waypoints,1) == length(times))
+assert(size(waypoints, 1) == length(times))
 
-% --- CONFIGURAZIONE OTTIMIZZAZIONE ---
+% --- 2. CONFIGURAZIONE OTTIMIZZAZIONE TRAIETTORIA (PLANNER) ---
 % -- ORDINE POLINOMI di traiettoria -- 
-config.n_pos = 7; % Grado/order polinomi posizione (minimo snap richiede derivate fino alla 4a)
+config.planner.n_pos = 7; % Grado/order polinomi posizione (minimo snap richiede derivate fino alla 4a)
 % poichè ogni segmento (intervallo tra due wp) ha 2 estremità e se serve
 % imporre la continuità di posizione velocità, accelerazione e jerk su
 % entrambi i lati servono 8 condizioni al contorno, 4 per lato. Un
 % polinomio di ordine 7 ha 8 coefficienti. Potenzialmente si potrebbe
 % imporre la continuità anche del jerk con n=9.
-config.n_yaw = 3; % Grado/order polinomi yaw (minimo accel. richiede derivate fino alla 2a, per vincolare posiz e veloc angolare di yaw)
-% -- GRADO DELLE DERIVATE DA MINIMIZZARE -- 
-config.k_pos = 4; % (4, snap)
-config.k_yaw = 2; % (2, Accelerazione Yaw)
+config.planner.n_yaw = 3; % Grado/order polinomi yaw (minimo accel. richiede derivate fino alla 2a, per vincolare posiz e veloc angolare di yaw)
 
-%  -- Parametri per Safe Corridors
+% -- GRADO DELLE DERIVATE DA MINIMIZZARE -- 
+config.planner.k_pos = 4; % (4, snap)
+config.planner.k_yaw = 2; % (2, Accelerazione Yaw)
+
+%  -- Parametri per Safe Corridors (colonna [m x 1])
 % Inf = nessun vincolo, numero = ampiezza massima deviazione (metri)
-config.corridor_delta = [Inf , 0.2, Inf]; 
+config.mission.corridor_delta = [Inf; 0.2; Inf]; 
+assert( size(waypoints,1) == length(times) && size(waypoints,1) == length(config.mission.corridor_delta)+1 )
 
 assert( size(waypoints,1) == length(times) && size(waypoints,1) == length(config.corridor_delta)+1 )
 
 % Quanti punti controllare all'interno di un segmento attivo
-config.corridor_samples = 7;
+config.mission.corridor_samples = 7;
 
 % -- Temporal scaling
-config.use_scaling = true;
-% --- DEFINIZIONE SCENARIO ACROBATICO 3D (Anello a 8 Non Complanare) ---
-[waypoints, times, config_scenario] = scenario_figure8_3d();
-config.corridor_delta = config_scenario.corridor_delta;
-config.corridor_samples = config_scenario.corridor_samples;
-%% generazione traiettoria minimum snap
+config.planner.use_scaling = true;
+
+% --- 3. DEFINIZIONE SCENARIO ACROBATICO 3D (Sovrascrittura con preset missione) ---
+[waypoints, times, config.mission] = load_mission('figure8_3d');
+
+%% --- 4. GENERAZIONE TRAIETTORIA MINIMUM SNAP INIZIALE ---
 [c_init, ~] = trajectoryGen(times, waypoints, config);
 
-%% PLOT TRAJECTORY
+%% --- 5. PLOT TRAJECTORY ---
 plot_trajectory(waypoints, times, c_init, config) % TODO : fix total z axis has to see all the traj, also figure the pos vel acc jerk snap profiles
 
-%% OPTIMAL SEGMENT TIMES
-
+%% --- 6. OPTIMAL SEGMENT TIMES (DISCESA DEL GRADIENTE) ---
 % Parametri discesa del gradiente
-config.opt_max_iter = 20;
-config.opt_h = 1e-4; % Perturbazione (preferibilmente più infinitesima possibile) per il gradiente numerico
-config.opt_learning_rate = 0.5; % Passo di discesa/apprendimento iniziale
-config.opt_use_backtracking = true;                                        
+config.planner.opt_times.max_iter = 20;
+config.planner.opt_times.h = 1e-4; % Perturbazione (preferibilmente più infinitesima possibile) per il gradiente numerico
+config.planner.opt_times.learning_rate = 0.5; % Passo di discesa/apprendimento iniziale
+config.planner.opt_times.use_backtracking = true;                                        
 
 % OTTIMIZZAZIONE
 [times_current, c_current, cost_history] = optimize_segment_times(times, waypoints, config); % spara trajectoryGen() in maniera iterativa
 
 %% Visualizzazione dell'Evoluzione del Costo
-% se ci sono output enormi ci sarà overshoot (passo apprendimento troppo
-% greedy)
+% se ci sono output enormi ci sarà overshoot (passo apprendimento troppo greedy)
 figure('Name', 'Ottimizzazione Tempi');
-plot(1:config.opt_max_iter, cost_history, '-co', 'LineWidth', 2, ...
+plot(1:config.planner.opt_times.max_iter, cost_history, '-co', 'LineWidth', 2, ...
     'MarkerSize', 6, 'MarkerFaceColor', 'c', 'MarkerEdgeColor', 'w');
 xlabel('Iterazione');
 ylabel('Funzione di Costo f(T)');
@@ -79,100 +79,86 @@ plot_trajectory_evolution(waypoints, times, c_init, times_current, c_current, co
 
 %% ==================== SETUP SIMULAZIONE  ====================
 
-% PARAMETRI FISICI DEL QUADRIROTORE (PLANT)
-% massa e gravità
-config.mass = 5.4; % Massa in kg
-config.g = 9.81;   % Accelerazione di gravità (m/s^2)
+% --- 7. PARAMETRI FISICI DEL QUADRIROTORE (PLANT) ---
+% Possiamo caricarli dal modulo preset del velivolo:
+config.drone = load_drone('heavy_5kg');
 
-% Matrice di inerzia J (kg * m^2) lungo gli assi x_B, y_B, z_B
-config.J = [0.509560, 0.000070, 0.000125
-            0.000070, 0.528320, 0.000015 
-            0.000125, 0.000015, 0.933390 ];  % [kg * m^2]
-
+% O sovrascriverli/ispezionarli esplicitamente in chiaro:
+% config.drone.mass = 5.4; % Massa in kg
+% config.drone.g = 9.81;   % Accelerazione di gravità (m/s^2)
+% config.drone.J = [0.509560, 0.000070, 0.000125;
+%                   0.000070, 0.528320, 0.000015;
+%                   0.000125, 0.000015, 0.933390];  % [kg * m^2]
 % Parametri aerodinamici e geometrici
-config.L = 0.17;                   % Lunghezza braccio (m)
-config.kF = 2.4*1e-5; % 8.548e-6;  % Coefficiente di spinta (N / (rad/s)^2)
-config.kM = 1.22e-6;  % 1.36e-7;   % Coefficiente di drag (Nm / (rad/s)^2)
-
+% config.drone.L = 0.17;                   % Lunghezza braccio (m)
+% config.drone.kF = 2.4e-5;                % Coefficiente di spinta (N / (rad/s)^2)
+% config.drone.kM = 1.22e-6;               % Coefficiente di drag elica (Nm / (rad/s)^2)
 % Limiti dei motori (Saturazione)
-config.w_min = 150;    % Idle speed minima (rad/s)
-config.w_max = 800;    % Max RPM (~7600 RPM convertiti in rad/s)  % TODO check
+% config.drone.w_min = 150;                % Idle speed minima (rad/s)
+% config.drone.w_max = 800;                % Max RPM (~7600 RPM convertiti in rad/s)
+% config.drone.max_tilt_angle_deg = 45;    % deg
 
 % =========================================================
-% CONFIGURAZIONE DISTURBI AMBIENTALI (Vento / Drag / Raffiche)
+% --- 8. CONFIGURAZIONE DISTURBI AMBIENTALI (Principio di Sovrapposizione) ---
 % =========================================================
-config.wind.enable = true;                  % Attiva/Disattiva i disturbi ambientali
+config.disturbances.enable = true;                  % Master switch disturbi
 
-% 1. Vento Costante Manuale (N) [X, Y, Z]
-config.wind.constant_force = [5.0; 5.0; 0.0]; % Impostare a [0;0;0] se si usa il vento random
+% 1. Resistenza Aerodinamica (Drag Puntiforme: F = -k * ||v|| * v)
+config.disturbances.drag.enable = true;
+config.disturbances.drag.k = 0.05;
 
-% 2. Vento Randomico Costante durante il Volo (Replicabile tramite Seed)
-config.wind.random_enable = false;           % Attiva la generazione di vento random
-config.wind.random_max_force = 2.0;         % Intensità massima della forza del vento (N)
-config.wind.random_seed = NaN;              % Seed di randomicità: se NaN genera seed casuale da clock e lo stampa a cruscotto
+% 2. Vento Costante Manuale (N) nel World Frame [X; Y; Z]
+config.disturbances.constant.enable = true;
+config.disturbances.constant.force = [5.0; 5.0; 0.0];
 
-% 3. Resistenza Aerodinamica (Drag Puntiforme)
-config.wind.k_drag = 0.05;                  % Coefficiente di drag aerodinamico (modello puntiforme)
-
-% 4. Raffiche di Vento Temporizzate (Wind Gusts)
-config.wind.gust_enable = false;            % Attiva raffiche temporizzate
-config.wind.gust_force = [2.5; 1.0; -0.5];  % Forza della raffica (N)
-config.wind.gust_start = 1.0;               % Tempo inizio raffica (s)
-config.wind.gust_end = 2.0;                 % Tempo fine raffica (s) 
+% 3. Raffiche di Vento Temporizzate ad Impulsi (PWM-like)
+config.disturbances.gust.enable = false;
+config.disturbances.gust.force = [2.5; 1.0; -0.5];  % Forza della raffica (N)
+config.disturbances.gust.t_start = 1.0;              % Tempo inizio primo impulso (s)
+config.disturbances.gust.t_end = 2.0;                % Tempo termine treno di impulsi (s)
+config.disturbances.gust.period = 4.0;               % Periodo T [s] (porre Inf per singolo impulso)
+config.disturbances.gust.duty_cycle = 0.25;          % Frazione attiva dell'impulso [0-1]
 
 % =========================================================
-%% TUNING ANALITICO DEI GUADAGNI (Pole Placement)
+%% --- 9. TUNING DEI GUADAGNI (Pole Placement o Manuale) ---
 % =========================================================
 % 1. Parametri di Risposta desiderata
 zeta = 1.0;                    % Smorzamento critico (1.0 = massima reattività senza oscillazioni)
 wn_pos = 3.0;      % (rad/s)   % Frequenza naturale Posizione (rad/s) -> Reattività lenta e fluida
 wn_att = 15.0;     % (rad/s)   % Frequenza naturale Assetto (rad/s) -> Deve essere circa 5x wn_pos
 % sistema sottodimensionato, per fare spostamenti laterali deve prima
-% inclinarsi e poi spingere -> assetto più veloce di posizione, è l'inner
-% loop
+% inclinarsi e poi spingere -> assetto più veloce di posizione, è l'inner loop
 
 % 2. OUTER LOOP (Posizione) - Scalato linearmente sulla Massa
-kp_base = config.mass * wn_pos^2;
-kv_base = 2 * config.mass * zeta * wn_pos; 
+kp_base = config.drone.mass * wn_pos^2;
+kv_base = 2 * config.drone.mass * zeta * wn_pos; 
 
 % Creiamo le matrici diagonali (asse Z leggermente più rigido per la gravità)
-config.Kp = diag([kp_base, kp_base, kp_base * 1.5]); 
-config.Kv = diag([kv_base, kv_base, kv_base * 1.5]);
+config.control.Kp = diag([kp_base, kp_base, kp_base * 1.5]); % Reattività all'errore di posizione
+config.control.Kv = diag([kv_base, kv_base, kv_base * 1.5]); % Smorzamento all'errore di velocità
 
 % 3. INNER LOOP (Assetto) - Scalato matricialmente sull'Inerzia (J)
 % Poiché J è già una matrice 3x3 che contiene le inerzie specifiche (Ixx, Iyy, Izz)
 % moltiplicando per lo scalare wn_att^2 otteniamo la matrice K_R perfetta.
-config.KR = config.J * (wn_att^2); 
-config.Komega = config.J * (2 * zeta * wn_att);
+config.control.KR = config.drone.J * (wn_att^2); % Reattività all'errore di orientamento (Roll, Pitch, Yaw)
+config.control.Komega = config.drone.J * (2 * zeta * wn_att); % Smorzamento all'errore di velocità angolare (p, q, r)
 
-% il controllore non lineare SO(3) necessita di queste 4 matrici di
-% guadagno
+% Tipologia controllore e flag di avvenuto tuning analitico
+config.control.type = "geometric";     % "geometric" | "pid" | "lqr"
+config.control.tuned = true;
 
-config.controller_type =  "geometric";     %  " geometric | pid | lqr "
+% =========================================================
+% --- 10. SETUP MOTORE SIMULAZIONE & PARAMETRI NUMERICI ---
+% =========================================================
+config.sim.dt = 0.001; 
+config.sim.warning_cooldown = 0.03;
 
-% % 
-% % % Tuning del loop di Posizione (Traslazionale)
-% % config.Kp = diag([15.0, 15.0, 30.0]); % Reattività all'errore di posizione
-% % config.Kv = diag([8.0, 8.0, 15.0]);  % Smorzamento all'errore di velocità
-% % 
-% % % Tuning del loop di Assetto (Rotazionale)
-% % config.KR = diag([3.0, 3.0, 1.5]);     % Reattività all'errore di orientamento (Roll, Pitch, Yaw)
-% % config.Komega = diag([0.5, 0.5, 0.3]); % Smorzamento all'errore di velocità angolare (p, q, r)
-
-%% ========= CONTROLLO DI SICUREZZA DI REALIZZABILITà DELLA TRAIETTORIA ===
-config.max_tilt_angle_deg = 45;  % deg
-
+%% ========= CONTROLLO DI SICUREZZA DI REALIZZABILITÀ DELLA TRAIETTORIA ===
 mission_possible = check_feasibility_advanced(times_current, c_current, config);
 
 %% ==========================================================
-% SIMULAZIONE AD ANELLO CHIUSO
+% --- 11. SIMULAZIONE AD ANELLO CHIUSO & LOOP DI SALVATAGGIO ---
 % ===========================================================
-
-% Parametri di simulazione
-config.dt = 0.001; 
-config.warning_cooldown = 0.03;
-
-% --- INIZIO LOOP DI SALVATAGGIO ---
 max_retries = 20;
 retries = 0;
 
@@ -189,9 +175,8 @@ while ~mission_possible && retries < max_retries
     [c_current, ~] = trajectoryGen(times_current, waypoints, config);
     
     % Ri-testiamo la nuova traiettoria rallentata
-    mission_possible = check_feasibility(times_current, c_current, config);
+    mission_possible = check_feasibility_advanced(times_current, c_current, config);
 end
-% --- FINE LOOP DI SALVATAGGIO ---
 
 if mission_possible
     fprintf(['--- Avvio Simulazione 3D in corso ---\n' ...
@@ -200,7 +185,4 @@ if mission_possible
 else
     disp('SIMULAZIONE ABORTITA: Anche allungando i tempi, la traiettoria richiede prestazioni oltre i limiti dei motori.');
     disp('Suggerimento: Allenta l''ottimizzazione temporale o riduci l''aggressività della manovra.');
-    
-    % TODO: plottare la traiettoria puramente geometrica
-    % per vedere cosa avrebbe dovuto fare il drone ???
 end

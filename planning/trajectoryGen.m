@@ -7,7 +7,7 @@ function [c, total_cost] = trajectoryGen(times, waypoints, config)
 % X, Y, Z (solitamente minimizzazione dello Snap) e Yaw (minimizzazione dell'accelerazione).
 %
 % INPUT:
-%   times     - Vettore [1 x M] dei tempi assoluti in cui il drone deve raggiungere i keyframes.
+%   times     - Vettore colonna [M x 1] dei tempi assoluti in cui il drone deve raggiungere i keyframes.
 %   waypoints - Matrice [M x 4] delle coordinate dei punti di passaggio [x, y, z, yaw].
 %   config    - Struttura dei parametri di simulazione contenente:
 %               * n_pos, n_yaw: Ordine dei polinomi per posizione e yaw.
@@ -17,7 +17,8 @@ function [c, total_cost] = trajectoryGen(times, waypoints, config)
 %
 % OUTPUT:
 %   c          - Struttura contenente le matrici dei coefficienti polinomiali reali
-%                (coeff_x, coeff_y, coeff_z, coeff_psi). Ogni matrice ha dimensione [(n+1) x m].
+%                (coeff_x, coeff_y, coeff_z, coeff_psi). Ogni matrice ha dimensione [m x (n+1)],
+%                dove la riga j-esima corrisponde al j-esimo segmento temporale [c0, c1, ..., cn].
 %   total_cost - Costo reale totale (somma degli integrali delle derivate quadrate) dell'intera
 %                traiettoria, calcolato prima della ricalibrazione dimensionale.
 %
@@ -30,22 +31,23 @@ function [c, total_cost] = trajectoryGen(times, waypoints, config)
 %   5. Safe Corridors: Se richiesti, applica vincoli di disuguaglianza per costringere la
 %      traiettoria all'interno di "tubi" di tolleranza virtuali tra i waypoints.    
 
+    times = times(:);        % Forza vettore colonna [M x 1]
     M = size(waypoints, 1);  % Numero di keyframes
     m = M - 1;               % Numero di segmenti tra i keyframes
-    n_pos = config.n_pos;
-    n_yaw = config.n_yaw;
-    k_pos = config.k_pos;
-    k_yaw = config.k_yaw;
     
-    % Leggiamo il flag per l'adimensionalizzazione temporale
-    use_scaling = isfield(config, 'use_scaling') && config.use_scaling;
+    % Parametri del planner
+    n_pos = config.planner.n_pos;
+    n_yaw = config.planner.n_yaw;
+    k_pos = config.planner.k_pos;
+    k_yaw = config.planner.k_yaw;
+    use_scaling = config.planner.use_scaling;
 
     % Struttura per memorizzare i coefficienti calcolati
-    % coeff_x, coeff_y, coeff_z saranno matrici (n+1) x m
-    c.coeff_x = zeros(n_pos + 1, m);
-    c.coeff_y = zeros(n_pos + 1, m);
-    c.coeff_z = zeros(n_pos + 1, m);
-    c.coeff_psi = zeros(n_yaw + 1, m);
+    % coeff_x, coeff_y, coeff_z saranno matrici m x (n+1)
+    c.coeff_x = zeros(m, n_pos + 1);
+    c.coeff_y = zeros(m, n_pos + 1);
+    c.coeff_z = zeros(m, n_pos + 1);
+    c.coeff_psi = zeros(m, n_yaw + 1);
     
     total_cost = 0;
     % DEBUG STRUCTURE
@@ -188,9 +190,9 @@ function [c, total_cost] = trajectoryGen(times, waypoints, config)
         
         % --- 5. Vincoli di Diseguaglianza (Safe Corridors) ---
         A = [];         b = [];
-        if isfield(config, 'corridor_delta') && ~isempty(config.corridor_delta)
-            deltas = config.corridor_delta;       % Vettore Tolleranza lungo m
-            num_samples = config.corridor_samples; % Quanti punti controllare per segmento
+        if isfield(config, 'mission') && isfield(config.mission, 'corridor_delta') && ~isempty(config.mission.corridor_delta)
+            deltas = config.mission.corridor_delta;
+            num_samples = config.mission.corridor_samples;
             
             for i = 1:m
                 delta_i = deltas(i);
@@ -273,10 +275,10 @@ function [c, total_cost] = trajectoryGen(times, waypoints, config)
             c_all_real(idx_start:idx_end) = c_seg_real;
         end
         
-        % Salvataggio coefficienti
-        if dim == 1, c.coeff_x   = reshape(c_all_real, n+1, m); end
-        if dim == 2, c.coeff_y   = reshape(c_all_real, n+1, m); end
-        if dim == 3, c.coeff_z   = reshape(c_all_real, n+1, m); end
-        if dim == 4, c.coeff_psi = reshape(c_all_real, n+1, m); end
+        % Salvataggio coefficienti: matrice [m x (n+1)] con riga = segmento j-esimo
+        if dim == 1, c.coeff_x   = reshape(c_all_real, n+1, m)'; end
+        if dim == 2, c.coeff_y   = reshape(c_all_real, n+1, m)'; end
+        if dim == 3, c.coeff_z   = reshape(c_all_real, n+1, m)'; end
+        if dim == 4, c.coeff_psi = reshape(c_all_real, n+1, m)'; end
     end % for dim = 1:4
 end    

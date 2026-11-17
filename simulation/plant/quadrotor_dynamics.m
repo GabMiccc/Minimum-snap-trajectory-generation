@@ -14,9 +14,9 @@ if nargin < 4, t = 0; end
 % config: struct con i parametri fisici (m, g, J)
 
 % --- Estrazione dei Parametri Fisici ---
-m = config.mass;
-g = config.g;
-J = config.J; % Matrice d'inerzia 3x3
+m = config.drone.mass;
+g = config.drone.g;
+J = config.drone.J; % Matrice d'inerzia 3x3
 
 % --- Decomposizione degli Input di Controllo ---
 u1 = u(1);            % Spinta totale (Thrust) lungo z_B

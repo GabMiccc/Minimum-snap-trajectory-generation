@@ -5,27 +5,46 @@ function is_feasible = check_feasibility_advanced(times, c_opt, config)
     % derivanti dall'inerzia del drone J e dalle accelerazioni angolari (Jerk/Snap),
     % invertendo la matrice di mixing per verificare la saturazione di ciascuno dei 4 motori.
 
+    % nota: È un controllo a priori in anello aperto (condizioni nominali ideali):
+    % non vede i contributi extra di spinta/coppia che il controllore in anello chiuso genererà
+    % per correggere errori di inseguimento (-Kp*ep - Kv*ev, -KR*eR -
+    % Kw*ew), nè tantomeno i disturbi.
+
+    % nota2: rispetto a check_feasibility (legacy) usa l'inerzia J e la
+    % differential flatness per le coppie. Inoltre fa il checksui singoli
+    % motori per la saturazione invece che sulla spinta totale. Facendo
+    % così risulta superfluo mettere un headroom, almeno per quanto
+    % riguarda questo check a condizioni ideali. In questo modo però si
+    % accettano traiettorie che in codnizioni ideali arrivano vicinissimi
+    % al 100% di spinta di un singolo motore, e potrebbero esserci
+    % situazioni di saturazione nell'entrare nella fisica reale (errori) +
+    % disturbi
+
     dt_check = 0.02; % Campionamento fine (50 Hz) per catturare i picchi di Jerk/Coppia
     t_eval = times(1) : dt_check : times(end);
     N = length(t_eval);
     is_feasible = true;
 
-    m = config.mass;
-    g = config.g;
-    J = config.J;
+    % Estrazione parametri costruttivi del velivolo
+    d = config.drone;
+    m = d.mass;
+    g = d.g;
+    J = d.J;
     e3 = [0; 0; 1];
 
     % Parametri costruttivi e Matrice di Mixing (Configurazione standard a '+')
-    kF = config.kF; 
-    kM = config.kM; 
-    L  = config.L;  
+    kF = d.kF; 
+    kM = d.kM; 
+    L  = d.L;  
     M = [ kF,    kF,    kF,    kF;
            0,  kF*L,     0, -kF*L;
         -kF*L,    0,  kF*L,     0;
           kM,   -kM,    kM,   -kM ];
 
-    w_min_sq = config.w_min^2;
-    w_max_sq = config.w_max^2;
+    w_min = d.w_min;
+    w_max = d.w_max;
+    w_min_sq = w_min^2;
+    w_max_sq = w_max^2;
 
     % Preallocazione serie temporali
     u1_arr     = zeros(1, N);
@@ -36,11 +55,15 @@ function is_feasible = check_feasibility_advanced(times, c_opt, config)
     for i = 1:N
         t = t_eval(i);
 
+        % Estrazione ordini polinomi
+        n_pos = config.planner.n_pos;
+        n_yaw = config.planner.n_yaw;
+
         % Estrazione stati desiderati dai polinomi
-        [~, ~, ax, jx, ~] = eval_traj(c_opt.coeff_x, times, t, config.n_pos, config);
-        [~, ~, ay, jy, ~] = eval_traj(c_opt.coeff_y, times, t, config.n_pos, config);
-        [~, ~, az, jz, ~] = eval_traj(c_opt.coeff_z, times, t, config.n_pos, config);
-        [yaw, yaw_dot, ~, ~, ~] = eval_traj(c_opt.coeff_psi, times, t, config.n_yaw, config);
+        [~, ~, ax, jx, ~] = eval_traj(c_opt.coeff_x, times, t, n_pos, config);
+        [~, ~, ay, jy, ~] = eval_traj(c_opt.coeff_y, times, t, n_pos, config);
+        [~, ~, az, jz, ~] = eval_traj(c_opt.coeff_z, times, t, n_pos, config);
+        [yaw, yaw_dot, ~, ~, ~] = eval_traj(c_opt.coeff_psi, times, t, n_yaw, config);
 
         acc_des  = [ax; ay; az];
         jerk_des = [jx; jy; jz];
@@ -120,7 +143,7 @@ function is_feasible = check_feasibility_advanced(times, c_opt, config)
         % Verifica Saturazione Massima di ciascun singolo motore
         if any(omega_sq > w_max_sq)
             fprintf('❌ ERRORE al tempo t=%.2fs: Motore %d richiede %.1f rad/s (Limite Max: %.1f rad/s)!\n', ...
-                    t, worst_motor, sqrt(max_sq), config.w_max);
+                    t, worst_motor, sqrt(max_sq), w_max);
             fprintf('   -> Coppia richiesta: Roll=%.2f Nm, Pitch=%.2f Nm, Yaw=%.2f Nm\n', ...
                     tau(1), tau(2), tau(3));
             is_feasible = false;
@@ -130,7 +153,7 @@ function is_feasible = check_feasibility_advanced(times, c_opt, config)
         % Verifica Saturazione Minima (Idle / Spegnimento)
         if any(omega_sq < w_min_sq)
             fprintf('❌ ERRORE al tempo t=%.2fs: Rischio spegnimento motore (richiesti < %.1f rad/s)!\n', ...
-                    t, config.w_min);
+                    t, w_min);
             is_feasible = false;
             break;
         end
@@ -138,7 +161,7 @@ function is_feasible = check_feasibility_advanced(times, c_opt, config)
 
     if is_feasible
         fprintf('✅ Traiettoria fisicamente realizzabile! Picco motore: %.1f rad/s (su limite %.1f rad/s).\n', ...
-                max_rpm_seen, config.w_max);
+                max_rpm_seen, w_max);
     else
         fprintf('⚠️  Traiettoria NON realizzabile: richiesta coppia e RPM oltre le capacità fisiche dei motori.\n');
     end

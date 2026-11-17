@@ -6,13 +6,14 @@ function u_real = motor_mixing(u_ideal, config)
     % 3. ricalcola spinta e momenti e li passa al motore dinamico
     
     % Estrazione parametri costruttivi
-    kF = config.kF; 
-    kM = config.kM; 
-    L  = config.L;  
+    d = config.drone;
+    kF = d.kF; 
+    kM = d.kM; 
+    L  = d.L;  
     
     % Limiti operativi dei motori (rad/s)
-    w_min = config.w_min;
-    w_max = config.w_max;
+    w_min = d.w_min;
+    w_max = d.w_max;
     
     % Matrice di Mixing (Configurazione standard a '+')
     M = [ kF,    kF,    kF,    kF;

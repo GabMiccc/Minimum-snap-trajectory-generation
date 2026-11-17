@@ -1,4 +1,4 @@
-function [waypoints, times, config_scenario] = scenario_figure8_3d()
+function [waypoints, times, config_scenario] = mission_figure8_3d()
     % SCENARIO_FIGURE8_3D Genera una traiettoria acrobatica a 8 tridimensionale (non complanare)
     %
     % Questa funzione restituisce keyframes 3D [x, y, z, yaw] che tracciano un otto 
@@ -18,11 +18,21 @@ function [waypoints, times, config_scenario] = scenario_figure8_3d()
          0.0,   0.0,  1.0,   0.0        % 9. Ritorno al punto di origine
     ];
 
-    % Vettore dei tempi di arrivo ai keyframes (in secondi)
-    times = [0.0, 2.0, 4.2, 6.5, 8.5, 10.8, 13.0, 15.2, 17.5];
+    % Vettore colonna dei tempi di arrivo ai keyframes (in secondi)
+    times = [
+        0.0;
+        2.0;
+        4.2;
+        6.5;
+        8.5;
+        10.8;
+        13.0;
+        15.2;
+        17.5
+    ];
 
     % Disattiviamo i corridoi di sicurezza per consentire l'evoluzione acrobatica libera
     m = size(waypoints, 1) - 1;
-    config_scenario.corridor_delta = Inf(1, m);
+    config_scenario.corridor_delta = Inf(m, 1);
     config_scenario.corridor_samples = 5;
 end
