@@ -46,6 +46,17 @@ function is_feasible = check_feasibility_advanced(times, c_opt, config)
     w_min_sq = w_min^2;
     w_max_sq = w_max^2;
 
+    % Headroom sul singolo rotore (margine sulla capacità in omega^2 per feedback e disturbi)
+    if isfield(config, 'planner') && isfield(config.planner, 'motor_headroom')
+        headroom = config.planner.motor_headroom;
+    else
+        headroom = 0.05; % Default: 5% di margine
+    end
+    w_max_sq_eff = w_max_sq * (1 - headroom);
+    w_min_sq_eff = w_min_sq * (1 + headroom);
+    w_max_eff = sqrt(w_max_sq_eff);
+    w_min_eff = sqrt(w_min_sq_eff);
+
     % Preallocazione serie temporali
     u1_arr     = zeros(1, N);
     omega_arr  = zeros(3, N);
@@ -140,28 +151,28 @@ function is_feasible = check_feasibility_advanced(times, c_opt, config)
             [~, worst_motor] = max(omega_sq);
         end
 
-        % Verifica Saturazione Massima di ciascun singolo motore
-        if any(omega_sq > w_max_sq)
-            fprintf('❌ ERRORE al tempo t=%.2fs: Motore %d richiede %.1f rad/s (Limite Max: %.1f rad/s)!\n', ...
-                    t, worst_motor, sqrt(max_sq), w_max);
+        % Verifica Saturazione Massima di ciascun singolo motore (con headroom)
+        if any(omega_sq > w_max_sq_eff)
+            fprintf('❌ ERRORE al tempo t=%.2fs: Motore %d richiede %.1f rad/s (Limite con headroom %.0f%%: %.1f rad/s, Max fisico: %.1f rad/s)!\n', ...
+                    t, worst_motor, sqrt(max_sq), headroom*100, w_max_eff, w_max);
             fprintf('   -> Coppia richiesta: Roll=%.2f Nm, Pitch=%.2f Nm, Yaw=%.2f Nm\n', ...
                     tau(1), tau(2), tau(3));
             is_feasible = false;
             break;
         end
 
-        % Verifica Saturazione Minima (Idle / Spegnimento)
-        if any(omega_sq < w_min_sq)
-            fprintf('❌ ERRORE al tempo t=%.2fs: Rischio spegnimento motore (richiesti < %.1f rad/s)!\n', ...
-                    t, w_min);
+        % Verifica Saturazione Minima (Idle / Spegnimento con headroom)
+        if any(omega_sq < w_min_sq_eff)
+            fprintf('❌ ERRORE al tempo t=%.2fs: Rischio spegnimento motore (richiesti < %.1f rad/s, Min fisico: %.1f rad/s)!\n', ...
+                    t, w_min_eff, w_min);
             is_feasible = false;
             break;
         end
     end
 
     if is_feasible
-        fprintf('✅ Traiettoria fisicamente realizzabile! Picco motore: %.1f rad/s (su limite %.1f rad/s).\n', ...
-                max_rpm_seen, w_max);
+        fprintf('✅ Traiettoria fisicamente realizzabile! Picco motore: %.1f rad/s (limite con headroom %.0f%%: %.1f rad/s, max fisico: %.1f rad/s).\n', ...
+                max_rpm_seen, headroom*100, w_max_eff, w_max);
     else
         fprintf('⚠️  Traiettoria NON realizzabile: richiesta coppia e RPM oltre le capacità fisiche dei motori.\n');
     end

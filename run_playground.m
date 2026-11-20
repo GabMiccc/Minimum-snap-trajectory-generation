@@ -8,7 +8,7 @@ addpath(genpath(pwd));
 %% --- 1. CRUSCOTTO DI CONTROLLO (SELEZIONE VELOCE) ---
 DRONE_NAME      = 'heavy_5kg';       % 'heavy_5kg' (5.4 kg) | 'hummingbird' (0.5 kg)
 MISSION_NAME    = 'figure8_3d';      % 'figure8_3d' | 'figure8_smooth' | 'simple_arc'
-CONTROLLER_TYPE = 'geometric';       % 'geometric' | 'pid'
+CONTROLLER_TYPE = 'pid';       % 'geometric' | 'pid'
 
 % Flag di esecuzione
 FLAG_OPTIMIZE_TIMES = true;          % Esegue gradient descent su ripartizione temporale
@@ -27,6 +27,7 @@ config.planner.n_yaw = 3;            % Ordine polinomi yaw
 config.planner.k_pos = 4;            % Derivata da minimizzare (4 = snap)
 config.planner.k_yaw = 2;            % Derivata yaw da minimizzare (2 = accel)
 config.planner.use_scaling = true;   % Scalatura temporale [0, 1]
+config.planner.motor_headroom = 0.15; % Margine 15% sulla capacità in omega^2 dei singoli motori
 
 % Parametri Ottimizzazione Tempi
 config.planner.opt_times.max_iter = 20;
@@ -45,16 +46,19 @@ separation_factor = 5.0;
 z_rigidity_factor = 1.5;   % Irrigidimento inerzia asse z
 config = tune_gains(config, Ts_pos);  
 
-% Configurazione Disturbi Ambientali (Principio di Sovrapposizione)
+% Configurazione Disturbi Ambientali (Vento in m/s + Drag su v_rel con drone.k_drag)
 config.disturbances.enable = FLAG_ENABLE_WIND;
 config.disturbances.drag.enable = true;
-config.disturbances.drag.k = 0.05;
 
 config.disturbances.constant.enable = true;
-config.disturbances.constant.force = [3.0; 3.0; 0.0]; % Vento costante 3N su X e Y
+const_stress_ratio = 0.50;                           % 15% del peso del drone in hover
+const_wind_dir     = [1; 1; 0];                      % Direzione nel World Frame
+config.disturbances.constant.vel = wind_vel_from_stress(const_stress_ratio, const_wind_dir, config.drone);
 
-config.disturbances.gust.enable = false;              % Treno di raffiche periodiche
-config.disturbances.gust.force = [2.5; 1.0; -0.5];
+config.disturbances.gust.enable = false;             % Treno di raffiche (si sommano al vento costante)
+gust_stress_ratio = 0.10;                            % 10% del peso (singola raffica)
+gust_wind_dir     = [1; 0.5; -0.2];                  % Direzione raffica
+config.disturbances.gust.vel = wind_vel_from_stress(gust_stress_ratio, gust_wind_dir, config.drone);
 config.disturbances.gust.t_start = 1.0;
 config.disturbances.gust.t_end = 8.0;
 config.disturbances.gust.period = 4.0;

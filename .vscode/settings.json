@@ -35,5 +35,8 @@
     }
   ],
   "latex-workshop.latex.clean.subfolder.enabled": true,
-  "latex-workshop.latex.autoClean.run": "onFailed"
+  "latex-workshop.formatting.latex": "none",
+  "[latex]": {
+    "editor.formatOnSave": false
+  }
 }

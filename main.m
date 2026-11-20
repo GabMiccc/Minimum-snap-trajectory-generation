@@ -41,6 +41,7 @@ config.mission.corridor_samples = 7;
 
 % -- Temporal scaling
 config.planner.use_scaling = true;
+config.planner.motor_headroom = 0.15; % Margine 15% sulla capacità in omega^2 dei singoli motori
 
 % --- 3. DEFINIZIONE SCENARIO ACROBATICO 3D (Sovrascrittura con preset missione) ---
 [waypoints, times, config.mission] = load_mission('figure8_3d');
@@ -99,21 +100,24 @@ config.drone = load_drone('heavy_5kg');
 % config.drone.max_tilt_angle_deg = 45;    % deg
 
 % =========================================================
-% --- 8. CONFIGURAZIONE DISTURBI AMBIENTALI (Principio di Sovrapposizione) ---
+% --- 8. CONFIGURAZIONE DISTURBI AMBIENTALI (Vento + Drag su v_rel) ---
 % =========================================================
 config.disturbances.enable = true;                  % Master switch disturbi
 
-% 1. Resistenza Aerodinamica (Drag Puntiforme: F = -k * ||v|| * v)
+% 1. Resistenza Aerodinamica (usa config.drone.k_drag e v_rel = v - v_wind)
 config.disturbances.drag.enable = true;
-config.disturbances.drag.k = 0.05;
 
-% 2. Vento Costante Manuale (N) nel World Frame [X; Y; Z]
+% 2. Vento Costante (definito come frazione del peso in hover -> m/s)
 config.disturbances.constant.enable = true;
-config.disturbances.constant.force = [5.0; 5.0; 0.0];
+const_stress_ratio = 0.15;                          % 15% del peso del drone
+const_wind_dir     = [1; 1; 0];                     % Direzione nel World Frame
+config.disturbances.constant.vel = wind_vel_from_stress(const_stress_ratio, const_wind_dir, config.drone);
 
-% 3. Raffiche di Vento Temporizzate ad Impulsi (PWM-like)
+% 3. Raffiche di Vento Temporizzate ad Impulsi (si sommano in velocità al vento costante)
 config.disturbances.gust.enable = false;
-config.disturbances.gust.force = [2.5; 1.0; -0.5];  % Forza della raffica (N)
+gust_stress_ratio = 0.10;                           % 10% del peso (singola raffica)
+gust_wind_dir     = [1; 0.4; -0.2];                 % Direzione raffica
+config.disturbances.gust.vel = wind_vel_from_stress(gust_stress_ratio, gust_wind_dir, config.drone);
 config.disturbances.gust.t_start = 1.0;              % Tempo inizio primo impulso (s)
 config.disturbances.gust.t_end = 2.0;                % Tempo termine treno di impulsi (s)
 config.disturbances.gust.period = 4.0;               % Periodo T [s] (porre Inf per singolo impulso)
