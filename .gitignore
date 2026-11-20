@@ -2,6 +2,6 @@
 *.asv
 *.m~
 *.req
-*.md
+# *.md
 chat_recuperate/
 thesis/

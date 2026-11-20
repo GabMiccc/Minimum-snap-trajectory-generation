@@ -1,4 +1,4 @@
-function u_real = motor_mixing(u_ideal, config)
+function [u_real, motor_info] = motor_mixing(u_ideal, config)
     % MOTOR_MIXING Converte i comandi ideali [u1; tau_x; tau_y; tau_z] in RPM reali
     % applicando Prioritized Control Allocation (PCA) analitica in caso di saturazione.
     % Gerarchia di priorità: Roll/Pitch (tau_x, tau_y) > Spinta (u1) > Yaw (tau_z).
@@ -22,7 +22,16 @@ function u_real = motor_mixing(u_ideal, config)
     % 1. Fast path: nessuna saturazione -> nessuna allocazione necessaria
     omega_sq_ideal = M \ u_ideal;
     if all(omega_sq_ideal >= w_min_sq) && all(omega_sq_ideal <= w_max_sq)
-        u_real = M * omega_sq_ideal;
+        omega_sq_real = omega_sq_ideal;
+        u_real = M * omega_sq_real;
+        if nargout > 1
+            span_avail = max(eps, w_max_sq - w_min_sq);
+            motor_info.omega_sq_ideal = omega_sq_ideal;
+            motor_info.omega_sq_real  = omega_sq_real;
+            motor_info.load_pct_ideal = 100 * (omega_sq_ideal - w_min_sq) / span_avail;
+            motor_info.load_pct_real  = 100 * (omega_sq_real  - w_min_sq) / span_avail;
+            motor_info.is_saturated   = false;
+        end
         return;
     end
 
@@ -75,4 +84,13 @@ function u_real = motor_mixing(u_ideal, config)
     
     % 3. Ricalcolo delle forze e momenti effettivamente generati
     u_real = M * omega_sq_real;
+
+    if nargout > 1
+        span_avail = max(eps, w_max_sq - w_min_sq);
+        motor_info.omega_sq_ideal = omega_sq_ideal;
+        motor_info.omega_sq_real  = omega_sq_real;
+        motor_info.load_pct_ideal = 100 * (omega_sq_ideal - w_min_sq) / span_avail;
+        motor_info.load_pct_real  = 100 * (omega_sq_real  - w_min_sq) / span_avail;
+        motor_info.is_saturated   = any(omega_sq_ideal < w_min_sq | omega_sq_ideal > w_max_sq);
+    end
 end

@@ -30,6 +30,7 @@ function simulate_flight(times, c_opt, waypoints, config)
     err_pos_history = zeros(3, N_steps);
     vel_real_history = zeros(1, N_steps); 
     vel_des_history = zeros(1, N_steps);
+    motor_load_history = zeros(4, N_steps);
 
    %% --- 2. SETUP GRAFICA 3D ---
     h_fig_3d = figure('Name', 'Simulazione Volo 3D', 'Color', [0.1 0.1 0.1]); 
@@ -162,7 +163,8 @@ function simulate_flight(times, c_opt, waypoints, config)
         % B. CONTROLLORE GEOMETRICO
         u_ideal = controller_selector(state_real, state_des, config, t);
         % FILTRO saturazione motori
-        u_real = motor_mixing(u_ideal, config);
+        [u_real, motor_info] = motor_mixing(u_ideal, config);
+        motor_load_history(:, i) = motor_info.load_pct_real;
         
         % C. DINAMICA E INTEGRAZIONE
         state_dot = quadrotor_dynamics(state_real, u_real, config, t);
@@ -273,29 +275,77 @@ function simulate_flight(times, c_opt, waypoints, config)
         end
         drawnow limitrate;
     end
-        %% --- PLOT PERFORMANCE ---
-    figure('Name', 'Analisi Performance', 'Color', 'w', 'Position', [100, 100, 800, 300]);
-    
-    % Riquadro 1: Errore di Posizione (X, Y, Z)
-    subplot(1, 2, 1);
-    plot(time_history, err_pos_history(1,:), 'g--', 'LineWidth', 1.5); hold on;
-    plot(time_history, err_pos_history(2,:), 'r--', 'LineWidth', 1.5);
-    plot(time_history, err_pos_history(3,:), 'b--', 'LineWidth', 1.5);
-    grid on;
-    xlabel('Time (s)'); ylabel('Error (m)');
-    legend('x', 'y', 'z', 'Location', 'best');
-    title('Position Error');
-    
-    % Riquadro 2: Tracking della Velocità
-    subplot(1, 2, 2);
-    plot(time_history, vel_des_history, 'b', 'LineWidth', 2); hold on;
-    plot(time_history, vel_real_history, 'r', 'LineWidth', 1.5);
-    grid on;
-    xlabel('Time (s)'); ylabel('Velocity (m/s)');
-    legend('desired', 'actual', 'Location', 'best');
-    title('Velocity Profile');
+    %% --- 6. CALCOLO METRICHE & PLOT PERFORMANCE (DARK THEME) ---
+    metrics = compute_metrics(time_history, pos_history, pos_des_history, vel_real_history, vel_des_history, config, motor_load_history);
 
+    err_abs_axes = abs(err_pos_history);
+    err_abs_3d   = sqrt(sum(err_pos_history.^2, 1));
 
-    metrics = compute_metrics(time_history, pos_history, pos_des_history, vel_real_history, vel_des_history, config);
+    figure('Name', 'Analisi Performance', 'Color', 'k', 'Position', [80, 80, 1280, 760]);
 
+    % Riquadro 1: Errore di Posizione con Segno (X, Y, Z)
+    ax1 = subplot(2, 2, 1); hold(ax1, 'on');
+    plot(ax1, time_history, err_pos_history(1,:), 'Color', [0.20 1.00 0.45], 'LineWidth', 1.5, 'DisplayName', 'e_x (m)');
+    plot(ax1, time_history, err_pos_history(2,:), 'Color', [1.00 0.35 0.35], 'LineWidth', 1.5, 'DisplayName', 'e_y (m)');
+    plot(ax1, time_history, err_pos_history(3,:), 'Color', [0.25 0.75 1.00], 'LineWidth', 1.5, 'DisplayName', 'e_z (m)');
+    yline(ax1, 0, ':', 'Color', [0.55 0.55 0.55], 'LineWidth', 1.0, 'HandleVisibility', 'off');
+    style_dark_axes(ax1, 'Tempo (s)', 'Errore (m)', 'Errore di Posizione (Assi X, Y, Z)');
+
+    % Riquadro 2: Errore Posizionale Assoluto (Norma 3D + Assi + MAE/RMSE/Max)
+    ax2 = subplot(2, 2, 2); hold(ax2, 'on');
+    plot(ax2, time_history, err_abs_axes(1,:), '--', 'Color', [0.20 1.00 0.45], 'LineWidth', 1.0, 'DisplayName', '|e_x|');
+    plot(ax2, time_history, err_abs_axes(2,:), '--', 'Color', [1.00 0.35 0.35], 'LineWidth', 1.0, 'DisplayName', '|e_y|');
+    plot(ax2, time_history, err_abs_axes(3,:), '--', 'Color', [0.25 0.75 1.00], 'LineWidth', 1.0, 'DisplayName', '|e_z|');
+    plot(ax2, time_history, err_abs_3d, '-', 'Color', [1.00 0.95 0.25], 'LineWidth', 2.0, ...
+        'DisplayName', sprintf('||e_p||_2 3D (Max: %.3f m)', metrics.max_pos_error));
+    yline(ax2, metrics.mae_pos_total, '-.', 'Color', [0.00 0.90 0.95], 'LineWidth', 1.3, ...
+        'DisplayName', sprintf('MAE 3D (%.3f m)', metrics.mae_pos_total));
+    yline(ax2, metrics.rmse_pos_total, ':', 'Color', [1.00 0.55 0.15], 'LineWidth', 1.4, ...
+        'DisplayName', sprintf('RMSE 3D (%.3f m)', metrics.rmse_pos_total));
+    plot(ax2, metrics.time_max_pos_error, metrics.max_pos_error, 'p', 'MarkerSize', 10, ...
+        'MarkerFaceColor', [1.00 0.25 0.25], 'MarkerEdgeColor', 'w', ...
+        'DisplayName', sprintf('Picco @ t=%.2fs', metrics.time_max_pos_error));
+    style_dark_axes(ax2, 'Tempo (s)', 'Errore Assoluto (m)', 'Errore Posizionale Assoluto');
+
+    % Riquadro 3: Tracking della Velocità
+    ax3 = subplot(2, 2, 3); hold(ax3, 'on');
+    plot(ax3, time_history, vel_des_history, '-', 'Color', [0.15 0.85 1.00], 'LineWidth', 2.0, 'DisplayName', 'Desiderata ||v_{des}||');
+    plot(ax3, time_history, vel_real_history, '-', 'Color', [1.00 0.40 0.20], 'LineWidth', 1.5, 'DisplayName', 'Reale ||v_{real}||');
+    style_dark_axes(ax3, 'Tempo (s)', 'Velocità (m/s)', 'Tracking della Velocità');
+
+    % Riquadro 4: Curve di Saturazione Motore per Motore (% Carico)
+    ax4 = subplot(2, 2, 4); hold(ax4, 'on');
+    motor_colors = [
+        0.15, 0.88, 1.00;  % M1 (+X) - Ciano
+        0.25, 1.00, 0.45;  % M2 (+Y) - Verde
+        1.00, 0.78, 0.15;  % M3 (-X) - Ambra
+        1.00, 0.35, 0.85   % M4 (-Y) - Magenta
+    ];
+    motor_labels = {'M1 (+X)', 'M2 (+Y)', 'M3 (-X)', 'M4 (-Y)'};
+    for m_idx = 1:4
+        plot(ax4, time_history, motor_load_history(m_idx, :), '-', ...
+            'Color', motor_colors(m_idx, :), 'LineWidth', 1.5, ...
+            'DisplayName', sprintf('%s (Max: %.1f%%)', motor_labels{m_idx}, metrics.motor_load_max_per_motor(m_idx)));
+    end
+    yline(ax4, 100, '--', 'Color', [1.00 0.25 0.25], 'LineWidth', 1.3, 'DisplayName', 'Saturazione Max (100%)');
+    yline(ax4, 0, '--', 'Color', [0.65 0.65 0.65], 'LineWidth', 1.1, 'DisplayName', 'Idle Min (0%)');
+    if isfield(config, 'planner') && isfield(config.planner, 'motor_headroom')
+        headroom_lim = (1 - config.planner.motor_headroom) * 100;
+        yline(ax4, headroom_lim, ':', 'Color', [1.00 0.55 0.10], 'LineWidth', 1.2, ...
+            'DisplayName', sprintf('Limite Planner (%.0f%%)', headroom_lim));
+    end
+    ylim(ax4, [-5, 108]);
+    style_dark_axes(ax4, 'Tempo (s)', 'Carico Motore (%)', 'Curve di Saturazione Motori (M1-M4)');
+
+end
+
+function style_dark_axes(ax, x_lbl, y_lbl, title_str)
+    grid(ax, 'on');
+    set(ax, 'Color', 'k', 'XColor', 'w', 'YColor', 'w', ...
+        'GridColor', [0.35 0.35 0.35], 'GridAlpha', 0.55);
+    xlabel(ax, x_lbl, 'Color', 'w', 'FontWeight', 'bold');
+    ylabel(ax, y_lbl, 'Color', 'w', 'FontWeight', 'bold');
+    title(ax, title_str, 'Color', 'w', 'FontSize', 11, 'FontWeight', 'bold');
+    leg = legend(ax, 'Location', 'best');
+    set(leg, 'TextColor', 'w', 'Color', [0.10 0.10 0.10], 'EdgeColor', [0.45 0.45 0.45], 'FontSize', 8.5);
 end
