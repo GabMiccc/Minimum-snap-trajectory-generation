@@ -249,7 +249,8 @@ function [c, total_cost] = trajectoryGen(times, waypoints, config)
              % && size(Aeq,1) == debugStruct.AmatrixExpectedRows ...
              % && size(Aeq,2) == debugStruct.AmatrixExpectedCols)
     
-        % Soluzione QP tramite quadprog
+        % Soluzione QP tramite quadprog (simmetrizzazione esplicita per stabilità numerica)
+        H_total = 0.5 * (H_total + H_total');
         options = optimoptions('quadprog', 'Display', 'off');
         c_all_nondim = quadprog(H_total, [],  A,  b, Aeq, beq, [], [], [], options);
         %%% x = quadprog(      H,  f,  A,  b, Aeq, beq, lb, ub, x0, options)

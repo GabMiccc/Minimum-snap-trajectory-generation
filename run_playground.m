@@ -7,12 +7,12 @@ addpath(genpath(pwd));
 
 %% --- 1. CRUSCOTTO DI CONTROLLO (SELEZIONE VELOCE) ---
 DRONE_NAME      = 'heavy_5kg';       % 'heavy_5kg' (5.4 kg) | 'hummingbird' (0.5 kg)
-MISSION_NAME    = 'figure8_3d';      % 'figure8_3d' | 'figure8_smooth' | 'simple_arc'
-CONTROLLER_TYPE = 'pid';       % 'geometric' | 'pid'
+MISSION_NAME    = 'figure8_corridors';      % 'figure8_3d' | 'figure8_smooth' | 'simple_arc'
+CONTROLLER_TYPE = 'geometric';       % 'geometric' | 'pid'
 
 % Flag di esecuzione
 FLAG_OPTIMIZE_TIMES = true;          % Esegue gradient descent su ripartizione temporale
-FLAG_ENABLE_WIND    = true;          % Attiva disturbi ambientali (vento/drag)
+FLAG_ENABLE_WIND    = false;          % Attiva disturbi ambientali (vento/drag)
 
 %% --- 2. CARICAMENTO MODULI E PARAMETRIZZAZIONE ---
 % Caricamento piattaforma (fisica e limiti motori)

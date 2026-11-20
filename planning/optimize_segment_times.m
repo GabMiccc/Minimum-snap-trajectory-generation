@@ -62,37 +62,53 @@ for iter = 1:max_iter
     end
 
     % 4. Aggiorna i tempi T
+    T_min = 0.05; % Durata minima fisica di un segmento (s)
+    grad_norm = norm(grad);
+    if grad_norm < 1e-12
+        fprintf('Gradiente nullo: ottimo locale raggiunto.\n');
+        cost_history(iter:end) = cost_base;
+        break;
+    end
+    step_dir = grad / grad_norm; % Direzione normalizzata per evitare esplosioni su segmenti corti
+
     if use_backtracking
         % --- VERO BACKTRACKING --- (monotono)
         lr = learning_rate;  % Parte con un passo coraggioso
-        while true
-            T_new = T - lr * grad; % scendiamo lungo il gradiente (se grad > 0 tocca muoversi al contrario, indi per cui il meno)
-            T_new = max(T_new, 0.1); % Evita tempi negativi o nulli
+        accepted = false;
+        while lr >= 1e-6
+            T_new = T - lr * step_dir;
+            if any(T_new < T_min)
+                lr = lr / 2;
+                continue;
+            end
             T_new = T_new * (sum(T) / sum(T_new)); % Mantieni il tempo totale costante
+            if any(T_new < T_min)
+                lr = lr / 2;
+                continue;
+            end
 
             % Ricalcola il costo con i nuovi tempi ipotetici
             times_new = [times(1); times(1) + cumsum(T_new)];
             [~, cost_new] = trajectoryGen(times_new, waypoints, config);
 
-            % Se il costo migliora (scende) o il passo è diventato microscopico, accetta e procedi
-            if cost_new < cost_base || lr < 1e-5
+            % Accetta solo se il costo è finito e migliora effettivamente
+            if isfinite(cost_new) && cost_new < cost_base
                 T = T_new;
-                break; % Esci dal ciclo while e vai alla prossima iterazione del gradiente
+                accepted = true;
+                break;
             else
-                % Se il costo esplode, il passo era troppo lungo: dimezzalo e riprova
-                % nella direzione definita dal gradiente c'è
-                % sicuramente un "meglio" locale ma potremmo
-                % scavalcarlo con un passo troppo grande
                 lr = lr / 2;
             end
         end
+        if ~accepted
+            fprintf('Backtracking: nessun miglioramento ulteriore possibile (lr < 1e-6). Stop.\n');
+            cost_history(iter:end) = cost_base;
+            break;
+        end
     else
-        % --- DISCESA DEL GRADIENTE A PASSO FISSO --- (caotico)
-        % Sottraiamo il gradiente moltiplicato per il learning rate
-        T_new = T - learning_rate * grad;
-        % Vincolo: T_i >= 0 (Nessun segmento può avere tempo negativo)
-        T_new = max(T_new, 0.1);
-        % Ripristina la somma esatta di T per compensare arrotondamenti
+        % --- DISCESA DEL GRADIENTE A PASSO FISSO ---
+        T_new = T - learning_rate * step_dir;
+        T_new = max(T_new, T_min);
         T = T_new * (sum(T) / sum(T_new));
     end
 end

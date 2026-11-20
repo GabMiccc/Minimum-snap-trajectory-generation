@@ -5,6 +5,9 @@ function [waypoints, times, mission_cfg] = load_mission(mission_name)
 %   mission_name - Stringa identificativa della missione:
 %                  'figure8_3d'
 %                  'figure8_smooth'
+%                  'figure8_corridors'
+%                  'sharp_turn_pca'
+%                  'hoop_pass'
 %                  'simple_arc'
 %
 % OUTPUT:
@@ -23,12 +26,21 @@ function [waypoints, times, mission_cfg] = load_mission(mission_name)
         case 'figure8_smooth'
             [waypoints, times, mission_cfg] = mission_figure8_smooth();
 
+        case 'figure8_corridors'
+            [waypoints, times, mission_cfg] = mission_figure8_corridors();
+
+        case 'sharp_turn_pca'
+            [waypoints, times, mission_cfg] = mission_sharp_turn_pca();
+
+        case 'hoop_pass'
+            [waypoints, times, mission_cfg] = mission_hoop_pass();
+
         case 'simple_arc'
             [waypoints, times, mission_cfg] = mission_simple_arc();
 
         otherwise
             error('load_mission:UnknownMission', ...
-                'Missione "%s" non riconosciuta. Opzioni disponibili: "figure8_3d", "figure8_smooth", "simple_arc".', ...
+                'Missione "%s" non riconosciuta. Opzioni disponibili: "figure8_3d", "figure8_smooth", "figure8_corridors", "sharp_turn_pca", "hoop_pass", "simple_arc".', ...
                 mission_name);
     end
 
